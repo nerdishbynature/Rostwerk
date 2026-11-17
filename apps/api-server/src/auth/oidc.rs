@@ -87,6 +87,14 @@ enum KeySource {
     Static,
 }
 
+/// How Swagger UI signs in: authorization code flow with PKCE, public client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocsLogin {
+    pub client_id: String,
+    pub authorization_url: String,
+    pub token_url: String,
+}
+
 /// Verifies access tokens of one issuer for one audience.
 pub struct OidcVerifier {
     issuer: String,
@@ -163,6 +171,25 @@ impl OidcVerifier {
         )
     }
 
+    /// Looks up the issuer's authorization and token endpoints for the
+    /// browser sign-in of `/docs`. Needs network access to the issuer.
+    pub async fn docs_login(&self, client_id: &str) -> Result<DocsLogin, VerifyError> {
+        let KeySource::Discovery { http, .. } = &self.source else {
+            return Err(VerifyError::Keys("no discovery for static keys".into()));
+        };
+        let doc = discover(http, &self.issuer, &self.discovery_url()).await?;
+        match (doc.authorization_endpoint, doc.token_endpoint) {
+            (Some(authorization_url), Some(token_url)) => Ok(DocsLogin {
+                client_id: client_id.to_string(),
+                authorization_url,
+                token_url,
+            }),
+            _ => Err(VerifyError::Keys(
+                "discovery document lacks authorization_endpoint or token_endpoint".into(),
+            )),
+        }
+    }
+
     pub async fn verify(&self, token: &str) -> Result<Claims, VerifyError> {
         let header = jsonwebtoken::decode_header(token).map_err(VerifyError::Malformed)?;
         let kid = header.kid.as_deref();
@@ -219,7 +246,11 @@ impl OidcVerifier {
 
         let result = async {
             let uri = jwks_uri
-                .get_or_try_init(|| discover_jwks_uri(http, &self.issuer, self.discovery_url()))
+                .get_or_try_init(|| async {
+                    discover(http, &self.issuer, &self.discovery_url())
+                        .await
+                        .map(|doc| doc.jwks_uri)
+                })
                 .await?;
             fetch_json(http, uri).await.map(|jwks| parse_jwks(&jwks))
         }
@@ -247,17 +278,21 @@ async fn fetch_json(http: &reqwest::Client, url: &str) -> Result<Value, VerifyEr
         .map_err(|e| VerifyError::Keys(format!("GET {url}: {e}")))
 }
 
-async fn discover_jwks_uri(
+/// The parts of the OpenID Connect discovery document Rostwerk uses.
+#[derive(Deserialize)]
+struct Discovery {
+    issuer: String,
+    jwks_uri: String,
+    authorization_endpoint: Option<String>,
+    token_endpoint: Option<String>,
+}
+
+async fn discover(
     http: &reqwest::Client,
     issuer: &str,
-    discovery_url: String,
-) -> Result<String, VerifyError> {
-    #[derive(Deserialize)]
-    struct Discovery {
-        issuer: String,
-        jwks_uri: String,
-    }
-    let doc: Discovery = serde_json::from_value(fetch_json(http, &discovery_url).await?)
+    discovery_url: &str,
+) -> Result<Discovery, VerifyError> {
+    let doc: Discovery = serde_json::from_value(fetch_json(http, discovery_url).await?)
         .map_err(|e| VerifyError::Keys(format!("discovery document: {e}")))?;
     // OpenID Connect Discovery 1.0, section 4.3: the issuer must match exactly.
     if doc.issuer != issuer {
@@ -266,7 +301,7 @@ async fn discover_jwks_uri(
             doc.issuer
         )));
     }
-    Ok(doc.jwks_uri)
+    Ok(doc)
 }
 
 /// Extracts the usable signing keys. Keys that cannot verify signatures

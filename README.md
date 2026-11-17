@@ -167,10 +167,12 @@ AGENT_TOKEN=$(curl -s http://localhost:8180/realms/rostwerk/protocol/openid-conn
   | jq -r .access_token)
 ```
 
-In `/docs`, click **Authorize** and use the block **oidc (OAuth2, authorization_code
-with PKCE)**: leave `client_id` as `rostwerk-docs`, tick `openid`, sign in as alice.
-Swagger lists every flow the provider advertises; only this one is meant for the
-browser. Alternatively paste a token into **bearer**. If your identity belongs to
+In `/docs`, click **Authorize**, then under **oidc** tick `openid` and sign in as
+alice (`client_id` is prefilled). Alternatively paste a token into **bearer**.
+The server looks up the issuer's sign-in endpoints at startup; if Keycloak is not
+running then, `/docs` offers only the **bearer** field (restart the server once
+Keycloak is up). Token checks do not depend on this and work as soon as the
+issuer is reachable. If your identity belongs to
 several tenants, also fill in **tenant** (`X-Rostwerk-Tenant`). The redirect URIs in
 the dev realm allow `http://localhost:8080/docs/*` only, so open the docs on that
 address.

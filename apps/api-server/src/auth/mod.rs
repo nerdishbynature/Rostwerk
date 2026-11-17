@@ -24,7 +24,7 @@ use core_host::{CoreState, members, tenants};
 use core_kernel::{Actor, Error, Result, TenantCtx, TenantId};
 use uuid::Uuid;
 
-pub use oidc::OidcVerifier;
+pub use oidc::{DocsLogin, OidcVerifier};
 
 /// Header that selects the tenant when the caller belongs to several.
 pub const TENANT_HEADER: &str = "x-rostwerk-tenant";
@@ -37,14 +37,18 @@ pub struct AuthConfig {
     pub admin_token: Option<String>,
     /// Verifier for OIDC access tokens. `None` disables OIDC.
     pub oidc: Option<Arc<OidcVerifier>>,
-    /// Public OIDC client that `/docs` (Swagger UI) signs in with.
-    pub docs_client_id: Option<String>,
+    /// Browser sign-in for `/docs` (Swagger UI). `None` hides it.
+    pub docs_login: Option<DocsLogin>,
 }
 
 impl AuthConfig {
     /// Reads `ROSTWERK_DEV_AUTH`, `ROSTWERK_ADMIN_TOKEN`, `ROSTWERK_OIDC_ISSUER`,
     /// `ROSTWERK_OIDC_AUDIENCE` and `ROSTWERK_OIDC_DOCS_CLIENT_ID`.
-    pub fn from_env() -> anyhow::Result<Self> {
+    ///
+    /// With a docs client id, the issuer's sign-in endpoints are looked up now.
+    /// If the issuer is unreachable, the server still starts: `/docs` then
+    /// offers only the plain bearer field, and token checks retry on demand.
+    pub async fn from_env() -> anyhow::Result<Self> {
         let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
         let oidc = match (var("ROSTWERK_OIDC_ISSUER"), var("ROSTWERK_OIDC_AUDIENCE")) {
             (Some(issuer), Some(audience)) => {
@@ -55,11 +59,21 @@ impl AuthConfig {
                 "set both ROSTWERK_OIDC_ISSUER and ROSTWERK_OIDC_AUDIENCE, or neither"
             ),
         };
+        let docs_login = match (&oidc, var("ROSTWERK_OIDC_DOCS_CLIENT_ID")) {
+            (Some(verifier), Some(client_id)) => match verifier.docs_login(&client_id).await {
+                Ok(login) => Some(login),
+                Err(err) => {
+                    tracing::warn!(error = %err, "issuer unreachable, /docs without sign-in");
+                    None
+                }
+            },
+            _ => None,
+        };
         Ok(Self {
             dev_tokens: var("ROSTWERK_DEV_AUTH").is_some_and(|v| v == "1"),
             admin_token: var("ROSTWERK_ADMIN_TOKEN"),
             oidc,
-            docs_client_id: var("ROSTWERK_OIDC_DOCS_CLIENT_ID"),
+            docs_login,
         })
     }
 }

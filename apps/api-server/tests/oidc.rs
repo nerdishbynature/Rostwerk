@@ -16,11 +16,12 @@ async fn setup(dev_tokens: bool) -> Option<(Harness, Idp)> {
     let verifier = OidcVerifier::discover(&idp.issuer, AUDIENCE)
         .unwrap()
         .with_min_refresh(Duration::ZERO);
+    let docs_login = verifier.docs_login("rostwerk-docs").await.unwrap();
     let h = harness_with(AuthConfig {
         dev_tokens,
         admin_token: Some(ADMIN.into()),
         oidc: Some(Arc::new(verifier)),
-        docs_client_id: Some("rostwerk-docs".into()),
+        docs_login: Some(docs_login),
     })
     .await?;
     Some((h, idp))
@@ -282,20 +283,58 @@ async fn dev_tokens_still_work_next_to_oidc_and_only_when_enabled() {
 }
 
 #[tokio::test]
-async fn docs_offer_oidc_sign_in() {
+async fn docs_offer_only_the_authorization_code_sign_in() {
     let Some((h, idp)) = setup(true).await else {
         return;
     };
     let (status, spec) = call(&h.app, "GET", "/openapi.json", "", None).await;
     assert_eq!(status, StatusCode::OK);
     let schemes = &spec["components"]["securitySchemes"];
-    assert_eq!(schemes["oidc"]["type"], "openIdConnect");
+    let oidc = &schemes["oidc"];
+    assert_eq!(oidc["type"], "oauth2");
+    // The issuer advertises four grants; the docs offer exactly one.
+    let flows = oidc["flows"].as_object().unwrap();
+    assert_eq!(flows.keys().collect::<Vec<_>>(), ["authorizationCode"]);
+    let flow = &flows["authorizationCode"];
     assert_eq!(
-        schemes["oidc"]["openIdConnectUrl"],
-        format!("{}/.well-known/openid-configuration", idp.issuer)
+        flow["authorizationUrl"],
+        format!("{}/protocol/openid-connect/auth", idp.issuer)
     );
+    assert_eq!(
+        flow["tokenUrl"],
+        format!("{}/protocol/openid-connect/token", idp.issuer)
+    );
+    assert_eq!(flow["scopes"].as_object().unwrap().len(), 1);
     assert_eq!(schemes["tenant"]["name"], "X-Rostwerk-Tenant");
 
     let (status, _) = call(&h.app, "GET", "/docs/oauth2-redirect.html", "", None).await;
     assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn docs_login_lookup_fails_cleanly_without_issuer() {
+    // Port 9 (discard) on localhost: nothing answers there.
+    let verifier = OidcVerifier::discover("http://127.0.0.1:9", AUDIENCE).unwrap();
+    assert!(verifier.docs_login("rostwerk-docs").await.is_err());
+}
+
+#[tokio::test]
+async fn docs_without_sign_in_keep_the_bearer_field() {
+    let idp = Idp::start().await;
+    let Some(h) = harness_with(AuthConfig {
+        dev_tokens: true,
+        admin_token: Some(ADMIN.into()),
+        oidc: Some(Arc::new(
+            OidcVerifier::discover(&idp.issuer, AUDIENCE).unwrap(),
+        )),
+        docs_login: None,
+    })
+    .await
+    else {
+        return;
+    };
+    let (_, spec) = call(&h.app, "GET", "/openapi.json", "", None).await;
+    let schemes = &spec["components"]["securitySchemes"];
+    assert!(schemes.get("oidc").is_none());
+    assert_eq!(schemes["bearer"]["scheme"], "bearer");
 }

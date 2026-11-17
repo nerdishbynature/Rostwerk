@@ -59,6 +59,9 @@ impl Idp {
         let discovery = json!({
             "issuer": issuer,
             "jwks_uri": format!("{issuer}/protocol/openid-connect/certs"),
+            "authorization_endpoint": format!("{issuer}/protocol/openid-connect/auth"),
+            "token_endpoint": format!("{issuer}/protocol/openid-connect/token"),
+            "grant_types_supported": ["authorization_code", "implicit", "password", "client_credentials"],
         });
         let published = jwks.clone();
         let app = Router::new()

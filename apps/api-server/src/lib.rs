@@ -13,8 +13,8 @@ use core_kernel::Db;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa::openapi::security::{
-    ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, OpenIdConnect, SecurityRequirement,
-    SecurityScheme,
+    ApiKey, ApiKeyValue, AuthorizationCode, Flow, HttpAuthScheme, HttpBuilder, OAuth2, Scopes,
+    SecurityRequirement, SecurityScheme,
 };
 
 pub use auth::{AuthConfig, OidcVerifier, TENANT_HEADER};
@@ -31,7 +31,7 @@ struct ApiDoc;
 /// Declares how clients (and /docs) send credentials.
 ///
 /// - `bearer`: any bearer token, an OIDC access token or a dev token.
-/// - `oidc`: sign in at the configured issuer (Swagger UI runs the flow).
+/// - `oidc`: browser sign-in at the issuer (authorization code + PKCE).
 /// - `tenant`: the `X-Rostwerk-Tenant` header, for subjects in several tenants.
 fn add_security(openapi: &mut utoipa::openapi::OpenApi, auth: &AuthConfig) {
     let components = openapi.components.get_or_insert_with(Default::default);
@@ -55,11 +55,18 @@ fn add_security(openapi: &mut utoipa::openapi::OpenApi, auth: &AuthConfig) {
         SecurityRequirement::new("bearer", Vec::<String>::new())
             .add("tenant", Vec::<String>::new()),
     ];
-    if let Some(verifier) = &auth.oidc {
+    // Only the authorization code flow: an `openIdConnect` scheme would make
+    // Swagger UI offer every grant and scope the issuer advertises.
+    if let (Some(verifier), Some(login)) = (&auth.oidc, &auth.docs_login) {
+        let flow = AuthorizationCode::new(
+            &login.authorization_url,
+            &login.token_url,
+            Scopes::from_iter([("openid", "Sign in with OpenID Connect")]),
+        );
         components.add_security_scheme(
             "oidc",
-            SecurityScheme::OpenIdConnect(OpenIdConnect::with_description(
-                verifier.discovery_url(),
+            SecurityScheme::OAuth2(OAuth2::with_description(
+                [Flow::AuthorizationCode(flow)],
                 format!("Sign in at {}", verifier.issuer()),
             )),
         );
@@ -123,7 +130,7 @@ pub fn app(db: Db, registry: ModuleRegistry, auth: AuthConfig) -> Router {
     let (core_routes, core_api) = core_host::audit::routes().split_for_parts();
     let mut openapi = ApiDoc::openapi();
     add_security(&mut openapi, &auth);
-    let docs = docs_html(auth.docs_client_id.as_deref());
+    let docs = docs_html(auth.docs_login.as_ref().map(|l| l.client_id.as_str()));
     openapi.merge(core_api);
     openapi.merge(module_api);
     let openapi = Arc::new(openapi);
