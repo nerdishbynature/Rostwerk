@@ -38,7 +38,11 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("connect DATABASE_URL")?;
 
-    let auth = AuthConfig::from_env();
+    let auth = AuthConfig::from_env().await?;
+    match &auth.oidc {
+        Some(verifier) => tracing::info!(issuer = verifier.issuer(), "OIDC enabled"),
+        None => tracing::info!("OIDC disabled (ROSTWERK_OIDC_ISSUER not set)"),
+    }
     if auth.dev_tokens {
         tracing::warn!("dev tokens enabled (ROSTWERK_DEV_AUTH=1), never use in production");
     }

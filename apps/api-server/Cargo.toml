@@ -22,9 +22,12 @@ module-masterdata.workspace = true
 anyhow.workspace = true
 dotenvy = "0.15"
 axum.workspace = true
+jsonwebtoken.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
@@ -33,5 +36,8 @@ utoipa.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 http-body-util.workspace = true
+p256.workspace = true
+rand_core.workspace = true
 tower.workspace = true

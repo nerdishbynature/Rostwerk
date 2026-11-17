@@ -21,8 +21,13 @@ module-masterdata = { path = "crates/module-masterdata" }
 
 anyhow = "1"
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 http-body-util = "0.1"
+jsonwebtoken = { version = "12", default-features = false, features = ["use_pem", "rust_crypto"] }
+p256 = { version = "0.13", features = ["jwk", "pkcs8", "pem"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

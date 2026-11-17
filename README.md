@@ -6,8 +6,8 @@ A **core** handles authentication, tenants, data access and module hosting.
 **Modules** (master data, sales, inventory, accounting, ...) plug into the core,
 and each tenant can switch them on or off.
 
-> Status: early skeleton. The core kernel, tenant isolation and a first module
-> (master data / partners) work. Auth is a development token for now.
+> Status: early skeleton. The core kernel, tenant isolation, OIDC authentication
+> and a first module (master data / partners) work.
 
 ## Layout
 
@@ -18,7 +18,7 @@ crates/
   module-masterdata/  Business partners (customers, suppliers)
 apps/
   api-server/         Binds core and modules into one HTTP service (`rostwerk` binary)
-docker/               Postgres init (application role)
+docker/               Postgres init (application role), Keycloak dev realm
 ```
 
 ## How tenant isolation works
@@ -32,6 +32,60 @@ docker/               Postgres init (application role)
 4. Routes of a module the tenant has not enabled answer `404`.
 
 Migrations run as `rostwerk_admin`; the server itself runs as `rostwerk_app`.
+
+## Authentication
+
+The API accepts two kinds of bearer tokens:
+
+- **OIDC access tokens** (JWT) from the issuer in `ROSTWERK_OIDC_ISSUER`. Rostwerk
+  finds the signing keys via `<issuer>/.well-known/openid-configuration`, caches the
+  JWKS (refetched hourly, and on an unknown `kid` at most every 30 s) and checks the
+  signature, `iss`, `aud` (must contain `ROSTWERK_OIDC_AUDIENCE`), `exp` and `nbf`
+  (30 s leeway) and `sub`. The algorithm comes from the key, never from the token;
+  `none` and HMAC tokens are rejected. Any standards-compliant provider works; the
+  dev setup uses Keycloak.
+- **Dev tokens** `dev:<tenant-id>:<user>`, only with `ROSTWERK_DEV_AUTH=1`.
+
+### From token to tenant
+
+The identity provider says *who* is calling; Rostwerk decides *where* they may act.
+The token carries no tenant. Instead the core table `tenant_members` maps the token's
+`sub` to tenants, with a kind per membership:
+
+| kind | Actor in audit and outbox |
+| --- | --- |
+| `user` | `user:<sub>` |
+| `agent` | `agent:<sub>` |
+
+Agents (machine identities, usually client credentials tokens) are admitted as
+`agent`, so their changes are never attributed to a human. The actor is the `sub`,
+because it is stable at the issuer; display names stay in the identity provider.
+
+Why a table and not a tenant claim: memberships are business data that the operator
+(and later the tenant admin) manages through the API, the same identity can belong to
+several tenants (consultants, tax advisors, agents serving many tenants), and no
+provider-specific token mappers are needed.
+
+Selecting the tenant per request:
+
+| Situation | Result |
+| --- | --- |
+| Missing, malformed, expired or foreign token | `401` |
+| Valid token, member of exactly one tenant | that tenant |
+| Valid token, several tenants, no header | `400`, set `X-Rostwerk-Tenant` |
+| `X-Rostwerk-Tenant: <tenant-id>` and a member there | that tenant |
+| No membership, or not a member of the requested tenant | `403` (unknown and foreign tenants look the same) |
+
+Manage memberships through the admin API:
+
+```bash
+# Admit a subject (the token's `sub`) as user or agent
+curl -X PUT localhost:8080/admin/tenants/<tenant-id>/members/<sub> \
+  -H 'Authorization: Bearer dev-admin' -H 'content-type: application/json' \
+  -d '{"kind":"user"}'
+curl localhost:8080/admin/tenants/<tenant-id>/members -H 'Authorization: Bearer dev-admin'
+curl -X DELETE localhost:8080/admin/tenants/<tenant-id>/members/<sub> -H 'Authorization: Bearer dev-admin'
+```
 
 ## Audit log and events
 
@@ -67,7 +121,61 @@ curl -X POST localhost:8080/v1/partners \
   -d '{"name":"ACME","kind":"customer"}'
 ```
 
-The OpenAPI spec is served at `GET /openapi.json`.
+The OpenAPI spec is served at `GET /openapi.json`, interactive docs at `/docs`.
+
+### Signing in with OIDC (Keycloak)
+
+`docker-compose up -d` also starts Keycloak on <http://localhost:8180> (admin console:
+`admin` / `admin`). On first start it imports
+[`docker/keycloak/rostwerk-realm.json`](docker/keycloak/rostwerk-realm.json), so there
+is nothing to click:
+
+| What | Value |
+| --- | --- |
+| Realm / issuer | `rostwerk` / `http://localhost:8180/realms/rostwerk` |
+| User | `alice` / `alice`, `sub` = `a11ce000-0000-4000-8000-000000000001` |
+| Client for `/docs` and curl | `rostwerk-docs` (public, authorization code + PKCE; password grant in this dev realm only) |
+| Client for agents | `rostwerk-agent` / secret `rostwerk-agent-secret`, `sub` = `a6e47000-0000-4000-8000-000000000001` |
+| Audience | `rostwerk-api` (added to tokens of both clients) |
+
+Keycloak was chosen over Zitadel because a single container with `--import-realm`
+gives a fully reproducible realm with fixed user ids, client secrets and an audience
+mapper, without a separate database or API calls to bootstrap. Keycloak dev mode keeps
+its state in the container; `docker-compose up -d --force-recreate keycloak` resets it.
+
+Admit alice and the agent to the tenant created above:
+
+```bash
+curl -X PUT localhost:8080/admin/tenants/<tenant-id>/members/a11ce000-0000-4000-8000-000000000001 \
+  -H 'Authorization: Bearer dev-admin' -H 'content-type: application/json' -d '{"kind":"user"}'
+curl -X PUT localhost:8080/admin/tenants/<tenant-id>/members/a6e47000-0000-4000-8000-000000000001 \
+  -H 'Authorization: Bearer dev-admin' -H 'content-type: application/json' -d '{"kind":"agent"}'
+```
+
+Get a token and call the API:
+
+```bash
+TOKEN=$(curl -s http://localhost:8180/realms/rostwerk/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=rostwerk-docs -d username=alice -d password=alice \
+  | jq -r .access_token)
+curl -X POST localhost:8080/v1/partners -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"name":"ACME","kind":"customer"}'
+
+# As the agent (client credentials)
+AGENT_TOKEN=$(curl -s http://localhost:8180/realms/rostwerk/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=rostwerk-agent -d client_secret=rostwerk-agent-secret \
+  | jq -r .access_token)
+```
+
+In `/docs`, click **Authorize**, then under **oidc** tick `openid` and sign in as
+alice (`client_id` is prefilled). Alternatively paste a token into **bearer**.
+The server looks up the issuer's sign-in endpoints at startup; if Keycloak is not
+running then, `/docs` offers only the **bearer** field (restart the server once
+Keycloak is up). Token checks do not depend on this and work as soon as the
+issuer is reachable. If your identity belongs to
+several tenants, also fill in **tenant** (`X-Rostwerk-Tenant`). The redirect URIs in
+the dev realm allow `http://localhost:8080/docs/*` only, so open the docs on that
+address.
 
 ## Tests
 
@@ -79,6 +187,10 @@ The integration tests in `apps/api-server/tests` need the Postgres from
 `docker-compose` and the URLs from `.env`. Each test creates its own database
 (`rostwerk_test_<id>`), migrates it and drops it afterwards, so tests are
 independent of each other and of a running dev server.
+
+OIDC tests need no identity provider: unit tests sign tokens with keys generated in
+the test, and the integration tests start a fake issuer on a local port that serves
+discovery and a JWKS. Keycloak is not needed in CI.
 
 Without database URLs the tests are skipped. In CI set `ROSTWERK_REQUIRE_DB=1`
 so they fail instead.
@@ -92,6 +204,9 @@ so they fail instead.
 | `BIND` | Listen address, default `127.0.0.1:8080` |
 | `ROSTWERK_DEV_AUTH` | `1` accepts `dev:<tenant>:<user>` bearer tokens. Development only |
 | `ROSTWERK_ADMIN_TOKEN` | Bearer token for `/admin`. Unset disables the admin API |
+| `ROSTWERK_OIDC_ISSUER` | OIDC issuer URL, exactly as in the tokens' `iss`. Unset disables OIDC |
+| `ROSTWERK_OIDC_AUDIENCE` | Required `aud` value of access tokens, e.g. `rostwerk-api` |
+| `ROSTWERK_OIDC_DOCS_CLIENT_ID` | Public client `/docs` signs in with, e.g. `rostwerk-docs` |
 
 ## Contributing
 

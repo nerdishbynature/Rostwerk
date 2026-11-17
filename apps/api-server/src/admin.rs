@@ -1,4 +1,4 @@
-//! Operator API: create tenants, switch modules on and off.
+//! Operator API: create tenants, switch modules on and off, admit members.
 
 use std::sync::Arc;
 
@@ -8,9 +8,11 @@ use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use core_host::members::{self, Member, MemberKind};
 use core_host::tenants::{self, NewTenant, Tenant};
 use core_host::{CoreState, ModuleManifest, ModuleRegistry};
 use core_kernel::{Error, Result, TenantId};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::{AuthConfig, bearer};
@@ -20,6 +22,11 @@ pub(crate) fn router(registry: Arc<ModuleRegistry>, auth: Arc<AuthConfig>) -> Ro
     Router::new()
         .route("/tenants", post(create_tenant))
         .route("/tenants/{id}/modules", put(set_modules))
+        .route("/tenants/{id}/members", get(list_members))
+        .route(
+            "/tenants/{id}/members/{subject}",
+            put(put_member).delete(delete_member),
+        )
         .route(
             "/modules",
             get(move || {
@@ -74,4 +81,45 @@ async fn set_modules(
         .await?
         .map(Json)
         .ok_or(Error::NotFound)
+}
+
+async fn list_members(
+    State(state): State<CoreState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<Member>>> {
+    tenants::find(&state.db, TenantId(id))
+        .await?
+        .ok_or(Error::NotFound)?;
+    Ok(Json(members::list(&state.db, TenantId(id)).await?))
+}
+
+#[derive(Debug, Deserialize)]
+struct MemberBody {
+    kind: MemberKind,
+}
+
+/// Admits an OIDC subject (`sub` claim) to a tenant as user or agent.
+async fn put_member(
+    State(state): State<CoreState>,
+    Path((id, subject)): Path<(Uuid, String)>,
+    Json(body): Json<MemberBody>,
+) -> Result<Json<Member>> {
+    if subject.trim().is_empty() {
+        return Err(Error::Validation("subject must not be empty".into()));
+    }
+    members::upsert(&state.db, TenantId(id), &subject, body.kind)
+        .await?
+        .map(Json)
+        .ok_or(Error::NotFound)
+}
+
+async fn delete_member(
+    State(state): State<CoreState>,
+    Path((id, subject)): Path<(Uuid, String)>,
+) -> Result<StatusCode> {
+    if members::remove(&state.db, TenantId(id), &subject).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Error::NotFound)
+    }
 }
