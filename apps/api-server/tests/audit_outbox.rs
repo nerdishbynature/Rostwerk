@@ -186,41 +186,95 @@ impl EventSink for Collect {
     }
 }
 
-#[tokio::test]
-async fn relay_publishes_and_marks_events() {
-    let Some(h) = harness().await else { return };
-    let t = create_tenant(&h.app, "Relay", &["masterdata"]).await;
-    let partner = create_partner(&h.app, &t, "Relay GmbH").await;
-    let tenant = Uuid::parse_str(&t).unwrap();
+/// Accepts the first `ok` events, then fails.
+struct FailAfter {
+    ok: usize,
+    seen: Mutex<usize>,
+}
 
-    // Other tests (or a running dev server) may relay concurrently, so drain
-    // until our event is marked published, then check what we saw.
-    let sink = Collect::default();
-    for _ in 0..50 {
-        relay_once(&h.db, &sink, 1000).await.unwrap();
-        let (pending,): (i64,) = sqlx::query_as(
-            "SELECT count(*) FROM outbox WHERE tenant_id = $1 AND published_at IS NULL",
-        )
-        .bind(tenant)
-        .fetch_one(&h.admin_pool)
-        .await
-        .unwrap();
-        if pending == 0 {
-            break;
-        }
+impl EventSink for FailAfter {
+    fn publish<'a>(&'a self, _event: &'a Event) -> SinkFuture<'a> {
+        let mut seen = self.seen.lock().unwrap();
+        *seen += 1;
+        let fail = *seen > self.ok;
+        Box::pin(async move {
+            if fail {
+                anyhow::bail!("sink down")
+            }
+            Ok(())
+        })
     }
+}
 
-    let (published,): (bool,) =
-        sqlx::query_as("SELECT published_at IS NOT NULL FROM outbox WHERE tenant_id = $1")
-            .bind(tenant)
+async fn pending_events(h: &common::Harness) -> i64 {
+    let (pending,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM outbox WHERE published_at IS NULL")
             .fetch_one(&h.admin_pool)
             .await
             .unwrap();
-    assert!(published);
+    pending
+}
 
-    let seen = sink.0.lock().unwrap();
-    if let Some(event) = seen.iter().find(|e| e.tenant_id == tenant) {
-        assert_eq!(event.topic, "masterdata.partner.created");
-        assert_eq!(event.payload["id"], partner["id"]);
-    }
+/// Creates a partner and renames it: two events, created then updated.
+async fn two_events(h: &common::Harness) -> Value {
+    let t = create_tenant(&h.app, "Relay", &["masterdata"]).await;
+    let partner = create_partner(&h.app, &t, "Relay GmbH").await;
+    let id = partner["id"].as_str().unwrap();
+    let (status, _) = call(
+        &h.app,
+        "PATCH",
+        &format!("/v1/partners/{id}"),
+        &token(&t),
+        Some(json!({ "name": "Relay AG" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    partner
+}
+
+#[tokio::test]
+async fn relay_publishes_in_order_and_only_once() {
+    let Some(h) = harness().await else { return };
+    let partner = two_events(&h).await;
+
+    let sink = Collect::default();
+    assert_eq!(relay_once(&h.db, &sink, 100).await.unwrap(), 2);
+    assert_eq!(pending_events(&h).await, 0);
+
+    let seen = sink.0.lock().unwrap().clone();
+    let topics: Vec<_> = seen.iter().map(|e| e.topic.as_str()).collect();
+    assert_eq!(
+        topics,
+        ["masterdata.partner.created", "masterdata.partner.updated"]
+    );
+    assert_eq!(seen[0].payload["id"], partner["id"]);
+    assert_eq!(seen[1].payload["name"], "Relay AG");
+    assert_eq!(seen[0].actor, "user:tester");
+
+    // Nothing left: a second run publishes nothing.
+    assert_eq!(relay_once(&h.db, &sink, 100).await.unwrap(), 0);
+    assert_eq!(sink.0.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn relay_keeps_events_the_sink_rejected() {
+    let Some(h) = harness().await else { return };
+    two_events(&h).await;
+
+    // First event goes through, the second fails and must stay pending.
+    let flaky = FailAfter {
+        ok: 1,
+        seen: Mutex::new(0),
+    };
+    assert_eq!(relay_once(&h.db, &flaky, 100).await.unwrap(), 1);
+    assert_eq!(pending_events(&h).await, 1);
+
+    // Once the sink is back, the remaining event is delivered.
+    let sink = Collect::default();
+    assert_eq!(relay_once(&h.db, &sink, 100).await.unwrap(), 1);
+    assert_eq!(pending_events(&h).await, 0);
+    assert_eq!(
+        sink.0.lock().unwrap()[0].topic,
+        "masterdata.partner.updated"
+    );
 }

@@ -76,7 +76,12 @@ cargo test
 ```
 
 The integration tests in `apps/api-server/tests` need the Postgres from
-`docker-compose` and the URLs from `.env`. Without them they are skipped.
+`docker-compose` and the URLs from `.env`. Each test creates its own database
+(`rostwerk_test_<id>`), migrates it and drops it afterwards, so tests are
+independent of each other and of a running dev server.
+
+Without database URLs the tests are skipped. In CI set `ROSTWERK_REQUIRE_DB=1`
+so they fail instead.
 
 ## Configuration
 
