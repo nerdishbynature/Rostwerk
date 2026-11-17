@@ -4,7 +4,9 @@ This is the pickup protocol for people and coding agents. Code rules live in
 [CONTRIBUTING.md](CONTRIBUTING.md); read it before changing code.
 
 Work is tracked in [GitHub issues](https://github.com/nerdishbynature/Rostwerk/issues)
-and on the [Rostwerk project board](https://github.com/orgs/nerdishbynature/projects).
+and on the [Rostwerk project board](https://github.com/orgs/nerdishbynature/projects/1)
+(Status: Backlog → Ready → In Progress → Review → Done). Labels are the source of truth;
+move the card to match when you claim an issue (In Progress) and open the PR (Review).
 
 ## Labels
 
