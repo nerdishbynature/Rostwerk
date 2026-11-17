@@ -93,6 +93,11 @@ so they fail instead.
 | `ROSTWERK_DEV_AUTH` | `1` accepts `dev:<tenant>:<user>` bearer tokens. Development only |
 | `ROSTWERK_ADMIN_TOKEN` | Bearer token for `/admin`. Unset disables the admin API |
 
+## Contributing
+
+Pick an issue labeled `ready` and follow [AGENTS.md](AGENTS.md) (pickup protocol) and
+[CONTRIBUTING.md](CONTRIBUTING.md) (code rules).
+
 ## License
 
 Rostwerk's code is licensed under either of

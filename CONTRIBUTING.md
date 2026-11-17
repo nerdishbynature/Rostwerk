@@ -12,6 +12,12 @@ Only submit work you have the right to contribute. Contributions to files listed
 Brand Material in [LICENSE-BRAND](LICENSE-BRAND) (such as `brand/`) are accepted under
 that licence's terms.
 
+## Finding work
+
+Open work is tracked as GitHub issues. Take one labeled `ready`; [AGENTS.md](AGENTS.md)
+describes how to claim it, name the branch and open the PR. It applies to people and
+coding agents alike.
+
 ## Development setup
 
 See [README.md](README.md#getting-started): `docker-compose up -d`, `cp .env.example .env`,

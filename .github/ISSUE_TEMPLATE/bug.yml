@@ -1,0 +1,47 @@
+name: Bug
+description: Something does not work as documented or expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this so that a person or coding agent with **no prior context** can reproduce and fix it.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What is wrong, and what is the expected behaviour?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Steps to reproduce (commands, requests, data), actual output or logs, commit or version.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: areas
+    attributes:
+      label: Affected areas
+      description: Crates, modules, files or endpoints involved, as far as known.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      placeholder: |
+        - [ ] A regression test reproduces the bug and passes with the fix
+        - [ ] `cargo fmt`, `cargo clippy -D warnings` and `cargo test` pass
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+  - type: textarea
+    id: questions
+    attributes:
+      label: Open questions

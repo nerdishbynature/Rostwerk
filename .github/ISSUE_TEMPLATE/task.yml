@@ -1,0 +1,55 @@
+name: Feature / task
+description: A unit of work sized to one pull request.
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this so that a person or coding agent with **no prior context** can pick it up.
+        Name files, crates, endpoints and tables explicitly. Size it to one pull request;
+        split epics into a first slice. See [AGENTS.md](https://github.com/nerdishbynature/Rostwerk/blob/main/AGENTS.md) for how work is picked up.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences. What should be true afterwards, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Background a newcomer needs. Link code, docs, related issues and PRs.
+    validations:
+      required: true
+  - type: textarea
+    id: areas
+    attributes:
+      label: Affected areas
+      description: Crates, modules, files, migrations, endpoints.
+      placeholder: |
+        - `crates/core-host`
+        - `apps/api-server/tests`
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Verifiable acceptance criteria. Prefer checks a test or reviewer can confirm.
+      placeholder: |
+        - [ ] ...
+        - [ ] Integration test covers ...
+        - [ ] `cargo fmt`, `cargo clippy -D warnings` and `cargo test` pass
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What this issue deliberately does not cover.
+  - type: textarea
+    id: questions
+    attributes:
+      label: Open questions
+      description: Decisions still needed. If any block the work, label the issue `needs-decision`.
