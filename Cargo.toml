@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/core-kernel",
+    "crates/core-host",
+    "crates/module-masterdata",
+    "apps/api-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+core-kernel = { path = "crates/core-kernel" }
+core-host = { path = "crates/core-host" }
+module-masterdata = { path = "crates/module-masterdata" }
+
+anyhow = "1"
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+http-body-util = "0.1"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "postgres",
+    "uuid",
+    "chrono",
+    "json",
+    "macros",
+    "migrate",
+] }
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-axum = "0.2"
+uuid = { version = "1", features = ["v7", "serde"] }

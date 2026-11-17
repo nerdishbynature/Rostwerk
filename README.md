@@ -1,0 +1,81 @@
+# Rostwerk
+
+An open-source ERP written in Rust: multi-tenant, API-first and AI-first.
+
+A **core** handles authentication, tenants, data access and module hosting.
+**Modules** (master data, sales, inventory, accounting, ...) plug into the core,
+and each tenant can switch them on or off.
+
+> Status: early skeleton. The core kernel, tenant isolation and a first module
+> (master data / partners) work. Auth is a development token for now.
+
+## Layout
+
+```
+crates/
+  core-kernel/        TenantCtx, tenant-scoped transactions (RLS), IDs, Money, errors
+  core-host/          Module trait, module registry, per-tenant module gate, tenant registry
+  module-masterdata/  Business partners (customers, suppliers)
+apps/
+  api-server/         Binds core and modules into one HTTP service (`rostwerk` binary)
+docker/               Postgres init (application role)
+```
+
+## How tenant isolation works
+
+1. Every request is authenticated and resolved to a `TenantCtx` (tenant, actor, enabled modules).
+2. Modules reach the database only through `ctx.begin(&db)`, which opens a transaction
+   and sets `app.tenant_id` for that transaction.
+3. Every tenant table has a Postgres row-level security policy on `tenant_id`.
+   The app connects as `rostwerk_app` (no superuser, no `BYPASSRLS`), so a query
+   without a tenant context sees no rows and cannot write any.
+4. Routes of a module the tenant has not enabled answer `404`.
+
+Migrations run as `rostwerk_admin`; the server itself runs as `rostwerk_app`.
+
+## Getting started
+
+Requirements: Rust (stable), Docker or Podman with `docker-compose`.
+
+```bash
+docker-compose up -d
+cp .env.example .env
+cargo run
+```
+
+Create a tenant with the master data module, then a partner:
+
+```bash
+curl -X POST localhost:8080/admin/tenants \
+  -H 'Authorization: Bearer dev-admin' -H 'content-type: application/json' \
+  -d '{"name":"Demo GmbH","modules":["masterdata"]}'
+
+curl -X POST localhost:8080/v1/partners \
+  -H 'Authorization: Bearer dev:<tenant-id>:alice' -H 'content-type: application/json' \
+  -d '{"name":"ACME","kind":"customer"}'
+```
+
+The OpenAPI spec is served at `GET /openapi.json`.
+
+## Tests
+
+```bash
+cargo test
+```
+
+The integration tests in `apps/api-server/tests` need the Postgres from
+`docker-compose` and the URLs from `.env`. Without them they are skipped.
+
+## Configuration
+
+| Variable | Meaning |
+| --- | --- |
+| `DATABASE_URL` | App connection, role subject to RLS |
+| `DATABASE_ADMIN_URL` | Connection used for migrations |
+| `BIND` | Listen address, default `127.0.0.1:8080` |
+| `ROSTWERK_DEV_AUTH` | `1` accepts `dev:<tenant>:<user>` bearer tokens. Development only |
+| `ROSTWERK_ADMIN_TOKEN` | Bearer token for `/admin`. Unset disables the admin API |
+
+## License
+
+To be decided.
