@@ -1,11 +1,12 @@
 use axum::extract::Request;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use core_kernel::{Error, TenantCtx};
+use core_kernel::{Db, Error, TenantCtx};
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
 use utoipa::openapi::OpenApi;
 
+use crate::bus::{Bus, Entry, OperationInfo, Operations};
 use crate::{HostRouter, Module, ModuleManifest};
 
 /// Migrations of the core itself (tenant registry).
@@ -56,6 +57,39 @@ impl ModuleRegistry {
             tracing::info!(module = id, "migrations applied");
         }
         Ok(())
+    }
+
+    /// The query and command bus over all modules' operations.
+    ///
+    /// # Panics
+    ///
+    /// If two modules register the same operation name, or a module registers
+    /// one outside its own namespace.
+    pub fn bus(&self, db: Db) -> Bus {
+        Bus::new(db, self.operation_entries())
+    }
+
+    /// All operations of all modules with their schemas, ordered by name.
+    /// Input for agent tool specs.
+    pub fn operations(&self) -> Vec<OperationInfo> {
+        let mut infos: Vec<_> = self
+            .operation_entries()
+            .into_iter()
+            .map(|e| e.info)
+            .collect();
+        infos.sort_by_key(|i| i.name);
+        infos
+    }
+
+    fn operation_entries(&self) -> Vec<Entry> {
+        self.modules
+            .iter()
+            .flat_map(|module| {
+                let mut ops = Operations::new(module.manifest().id);
+                module.operations(&mut ops);
+                ops.into_entries()
+            })
+            .collect()
     }
 
     /// Routes of all modules, each behind its per-tenant gate, plus their OpenAPI.

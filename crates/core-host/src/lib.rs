@@ -5,6 +5,7 @@
 //! answers 404 for modules the tenant has not enabled.
 
 pub mod audit;
+pub mod bus;
 pub mod members;
 pub mod outbox;
 mod registry;
@@ -15,12 +16,15 @@ use core_kernel::Db;
 use sqlx::migrate::Migrator;
 use utoipa_axum::router::OpenApiRouter;
 
+pub use bus::{Bus, Operation, OperationInfo, OperationKind, OperationSchema, Operations};
 pub use registry::ModuleRegistry;
 
 /// State shared by all routes.
 #[derive(Clone)]
 pub struct CoreState {
     pub db: Db,
+    /// Queries and commands of all modules.
+    pub bus: Bus,
 }
 
 /// Static description of a module.
@@ -47,6 +51,9 @@ pub trait Module: Send + Sync + 'static {
 
     /// HTTP routes with their OpenAPI description.
     fn routes(&self) -> OpenApiRouter<CoreState>;
+
+    /// Queries and commands this module offers to other modules via the [`Bus`].
+    fn operations(&self, _ops: &mut Operations) {}
 }
 
 /// Plain router type that the host hands to the application.

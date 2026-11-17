@@ -3,7 +3,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use core_host::CoreState;
-use core_kernel::{Error, Result, TenantCtx, new_id};
+use core_kernel::{Error, Result, TenantCtx, TenantTx, new_id};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
@@ -226,12 +226,18 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Partner>> {
     let mut tx = ctx.begin(&state.db).await?;
-    let partner =
-        sqlx::query_as::<_, Partner>(&format!("SELECT {COLUMNS} FROM partners WHERE id = $1"))
-            .bind(id)
-            .fetch_optional(tx.conn())
-            .await?;
+    let partner = find(&mut tx, id).await?;
     tx.commit().await?;
 
     partner.map(Json).ok_or(Error::NotFound)
+}
+
+/// Loads one partner of the transaction's tenant.
+pub(crate) async fn find(tx: &mut TenantTx, id: Uuid) -> Result<Option<Partner>> {
+    Ok(
+        sqlx::query_as::<_, Partner>(&format!("SELECT {COLUMNS} FROM partners WHERE id = $1"))
+            .bind(id)
+            .fetch_optional(tx.conn())
+            .await?,
+    )
 }

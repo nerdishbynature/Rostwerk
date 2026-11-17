@@ -122,7 +122,8 @@ const OAUTH2_REDIRECT_HTML: &str = include_str!("../assets/oauth2-redirect.html"
 
 /// Builds the full application router.
 pub fn app(db: Db, registry: ModuleRegistry, auth: AuthConfig) -> Router {
-    let state = CoreState { db };
+    let bus = registry.bus(db.clone());
+    let state = CoreState { db, bus };
     let auth = Arc::new(auth);
     let registry = Arc::new(registry);
 

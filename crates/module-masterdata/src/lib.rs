@@ -1,9 +1,10 @@
 //! Master data module: business partners (customers and suppliers) and articles.
 
 mod articles;
+mod ops;
 mod partners;
 
-use core_host::{CoreState, Module, ModuleManifest};
+use core_host::{CoreState, Module, ModuleManifest, Operations};
 use sqlx::migrate::Migrator;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -32,5 +33,9 @@ impl Module for Masterdata {
             .routes(routes!(partners::get, partners::update))
             .routes(routes!(articles::list, articles::create))
             .routes(routes!(articles::get, articles::update))
+    }
+
+    fn operations(&self, ops: &mut Operations) {
+        ops::register(ops);
     }
 }
