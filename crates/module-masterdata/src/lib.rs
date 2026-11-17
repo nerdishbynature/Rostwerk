@@ -28,6 +28,6 @@ impl Module for Masterdata {
     fn routes(&self) -> OpenApiRouter<CoreState> {
         OpenApiRouter::new()
             .routes(routes!(partners::list, partners::create))
-            .routes(routes!(partners::get))
+            .routes(routes!(partners::get, partners::update))
     }
 }

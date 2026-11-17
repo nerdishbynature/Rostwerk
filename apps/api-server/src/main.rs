@@ -1,4 +1,8 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use anyhow::Context;
+use core_host::outbox;
 use core_kernel::Db;
 use rostwerk_api::{AuthConfig, app, registry};
 use sqlx::postgres::PgPoolOptions;
@@ -39,9 +43,18 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("dev tokens enabled (ROSTWERK_DEV_AUTH=1), never use in production");
     }
 
+    let db = Db::new(pool);
+
+    // Outbox relay. Events go to the log until NATS is wired in.
+    tokio::spawn(outbox::run_relay(
+        db.clone(),
+        Arc::new(outbox::LogSink),
+        Duration::from_millis(500),
+    ));
+
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, "rostwerk listening");
-    axum::serve(listener, app(Db::new(pool), registry, auth)).await?;
+    axum::serve(listener, app(db, registry, auth)).await?;
     Ok(())
 }
 

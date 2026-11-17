@@ -1,0 +1,3 @@
+CREATE TRIGGER partners_audit
+    AFTER INSERT OR UPDATE OR DELETE ON partners
+    FOR EACH ROW EXECUTE FUNCTION rostwerk_audit();

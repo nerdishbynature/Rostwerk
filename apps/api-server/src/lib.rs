@@ -72,18 +72,22 @@ pub fn app(db: Db, registry: ModuleRegistry, auth: AuthConfig) -> Router {
     let registry = Arc::new(registry);
 
     let (module_routes, module_api) = registry.router();
+    let (core_routes, core_api) = core_host::audit::routes().split_for_parts();
     let mut openapi = ApiDoc::openapi();
+    openapi.merge(core_api);
     openapi.merge(module_api);
     let openapi = Arc::new(openapi);
 
-    // Module routes: authenticate first, then the per-module gate runs.
-    let module_routes = module_routes.layer(middleware::from_fn_with_state(
-        (state.clone(), auth.clone()),
-        auth::authenticate,
-    ));
+    // Tenant routes (core + modules): authenticate first, then the per-module gate runs.
+    let tenant_routes = core_routes
+        .merge(module_routes)
+        .layer(middleware::from_fn_with_state(
+            (state.clone(), auth.clone()),
+            auth::authenticate,
+        ));
 
     Router::new()
-        .merge(module_routes)
+        .merge(tenant_routes)
         .nest("/admin", admin::router(registry, auth))
         .route("/health", get(|| async { "ok" }))
         .route("/docs", get(|| async { Html(DOCS_HTML) }))

@@ -4,6 +4,8 @@
 //! module is decided per request: the gate installed by [`ModuleRegistry`]
 //! answers 404 for modules the tenant has not enabled.
 
+pub mod audit;
+pub mod outbox;
 mod registry;
 pub mod tenants;
 

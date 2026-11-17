@@ -33,6 +33,18 @@ docker/               Postgres init (application role)
 
 Migrations run as `rostwerk_admin`; the server itself runs as `rostwerk_app`.
 
+## Audit log and events
+
+- **Audit log:** every insert, update and delete on an audited table is journaled
+  by the `rostwerk_audit()` trigger with actor, before and after. A module opts a
+  table in with one `CREATE TRIGGER` line, so no handler can forget it.
+  `audit_log` is append-only (updates, deletes, truncation and direct inserts fail)
+  and tenant-scoped. Read it via `GET /v1/audit`.
+- **Outbox:** modules call `tx.publish(topic, &payload)` inside their tenant
+  transaction. The event is stored only if the transaction commits. A relay moves
+  events to an `EventSink` (the log for now, NATS later) with at-least-once delivery.
+  Topic convention: `<module>.<entity>.<event>`, e.g. `masterdata.partner.created`.
+
 ## Getting started
 
 Requirements: Rust (stable), Docker or Podman with `docker-compose`.

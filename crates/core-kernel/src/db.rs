@@ -1,6 +1,8 @@
+use serde::Serialize;
 use sqlx::{PgConnection, PgPool, Postgres, Transaction};
+use uuid::Uuid;
 
-use crate::{Result, TenantId};
+use crate::{Actor, Error, Result, TenantId, new_id};
 
 /// Database handle shared by the core and all modules.
 ///
@@ -23,21 +25,45 @@ impl Db {
         &self.pool
     }
 
-    pub(crate) async fn begin_for_tenant(&self, tenant_id: TenantId) -> Result<TenantTx> {
+    pub(crate) async fn begin_for_tenant(
+        &self,
+        tenant_id: TenantId,
+        actor: &Actor,
+    ) -> Result<TenantTx> {
         let mut tx = self.pool.begin().await?;
-        // `true` = local to this transaction; the setting is gone after commit/rollback.
-        sqlx::query("SELECT set_config('app.tenant_id', $1, true)")
-            .bind(tenant_id.to_string())
+        // `true` = local to this transaction; the settings are gone after commit/rollback.
+        // app.tenant_id arms RLS, app.actor is read by the audit trigger.
+        sqlx::query(
+            "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor', $2, true)",
+        )
+        .bind(tenant_id.to_string())
+        .bind(actor.to_string())
+        .execute(&mut *tx)
+        .await?;
+        Ok(TenantTx {
+            tx,
+            tenant_id,
+            actor: actor.to_string(),
+        })
+    }
+
+    /// Cross-tenant transaction for core background jobs (outbox relay).
+    /// Only tables whose policy allows `app.system` become visible.
+    pub async fn begin_system(&self) -> Result<SystemTx> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT set_config('app.system', 'on', true)")
             .execute(&mut *tx)
             .await?;
-        Ok(TenantTx { tx, tenant_id })
+        Ok(SystemTx { tx })
     }
 }
 
-/// A transaction bound to one tenant. Row-level security filters every query.
+/// A transaction bound to one tenant. Row-level security filters every query,
+/// and every change to an audited table is journaled with the acting identity.
 pub struct TenantTx {
     tx: Transaction<'static, Postgres>,
     tenant_id: TenantId,
+    actor: String,
 }
 
 impl TenantTx {
@@ -46,6 +72,43 @@ impl TenantTx {
     }
 
     /// Connection to run queries on, e.g. `.fetch_all(tx.conn())`.
+    pub fn conn(&mut self) -> &mut PgConnection {
+        &mut self.tx
+    }
+
+    /// Records a domain event in the outbox, atomically with this transaction.
+    /// It is published only if the transaction commits.
+    ///
+    /// Topic convention: `<module>.<entity>.<event>`, e.g. `masterdata.partner.created`.
+    pub async fn publish(&mut self, topic: &str, payload: &impl Serialize) -> Result<Uuid> {
+        let payload = serde_json::to_value(payload)
+            .map_err(|e| Error::Validation(format!("event payload: {e}")))?;
+        let id = new_id();
+        sqlx::query(
+            "INSERT INTO outbox (id, tenant_id, topic, payload, actor) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(id)
+        .bind(self.tenant_id)
+        .bind(topic)
+        .bind(payload)
+        .bind(&self.actor)
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(id)
+    }
+
+    pub async fn commit(self) -> Result<()> {
+        self.tx.commit().await?;
+        Ok(())
+    }
+}
+
+/// A cross-tenant transaction for core jobs. See [`Db::begin_system`].
+pub struct SystemTx {
+    tx: Transaction<'static, Postgres>,
+}
+
+impl SystemTx {
     pub fn conn(&mut self) -> &mut PgConnection {
         &mut self.tx
     }

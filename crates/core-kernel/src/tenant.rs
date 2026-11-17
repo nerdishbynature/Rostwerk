@@ -13,6 +13,16 @@ pub enum Actor {
     Agent(String),
 }
 
+impl std::fmt::Display for Actor {
+    /// Stable form stored in audit and outbox rows, e.g. `user:alice`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Actor::User(id) => write!(f, "user:{id}"),
+            Actor::Agent(id) => write!(f, "agent:{id}"),
+        }
+    }
+}
+
 /// Context of the current request: which tenant, who acts, which modules are on.
 ///
 /// It is derived from the verified credential by the core, never from client
@@ -52,7 +62,7 @@ impl TenantCtx {
 
     /// Opens a transaction scoped to this tenant (Postgres RLS is armed).
     pub async fn begin(&self, db: &Db) -> Result<TenantTx> {
-        db.begin_for_tenant(self.tenant_id).await
+        db.begin_for_tenant(self.tenant_id, &self.actor).await
     }
 }
 

@@ -138,9 +138,78 @@ pub async fn create(
     .bind(ext)
     .fetch_one(tx.conn())
     .await?;
+    tx.publish("masterdata.partner.created", &partner).await?;
     tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(partner)))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PartnerChanges {
+    pub name: Option<String>,
+    pub kind: Option<PartnerKind>,
+    /// Empty string removes the email.
+    pub email: Option<String>,
+    /// Replaces all custom fields.
+    #[schema(value_type = Option<Object>)]
+    pub ext: Option<Value>,
+}
+
+/// Change a partner. Fields left out stay as they are.
+#[utoipa::path(
+    patch,
+    path = "/v1/partners/{id}",
+    tag = "masterdata",
+    params(("id" = Uuid, Path, description = "Partner id")),
+    request_body = PartnerChanges,
+    responses(
+        (status = 200, body = Partner),
+        (status = 404, description = "Not found"),
+        (status = 422, description = "Invalid input")
+    )
+)]
+pub async fn update(
+    State(state): State<CoreState>,
+    ctx: TenantCtx,
+    Path(id): Path<Uuid>,
+    Json(changes): Json<PartnerChanges>,
+) -> Result<Json<Partner>> {
+    let name = changes.name.as_deref().map(str::trim);
+    if name.is_some_and(str::is_empty) {
+        return Err(Error::Validation("name must not be empty".into()));
+    }
+    if changes.ext.as_ref().is_some_and(|ext| !ext.is_object()) {
+        return Err(Error::Validation("ext must be a JSON object".into()));
+    }
+    // None = keep, Some(None) = clear, Some(Some(x)) = set.
+    let email = changes
+        .email
+        .map(|e| Some(e.trim().to_string()).filter(|e| !e.is_empty()));
+
+    let mut tx = ctx.begin(&state.db).await?;
+    let partner = sqlx::query_as::<_, Partner>(&format!(
+        "UPDATE partners SET
+             name = coalesce($2, name),
+             kind = coalesce($3, kind),
+             email = CASE WHEN $4 THEN $5 ELSE email END,
+             ext = coalesce($6, ext),
+             updated_at = now()
+         WHERE id = $1
+         RETURNING {COLUMNS}"
+    ))
+    .bind(id)
+    .bind(name)
+    .bind(changes.kind)
+    .bind(email.is_some())
+    .bind(email.flatten())
+    .bind(changes.ext)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(Error::NotFound)?;
+    tx.publish("masterdata.partner.updated", &partner).await?;
+    tx.commit().await?;
+
+    Ok(Json(partner))
 }
 
 /// Get one partner.
