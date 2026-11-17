@@ -1,0 +1,84 @@
+{
+  "realm": "rostwerk",
+  "displayName": "Rostwerk (development)",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 900,
+  "clients": [
+    {
+      "clientId": "rostwerk-docs",
+      "name": "Rostwerk API docs (Swagger UI)",
+      "description": "Public client for /docs and curl in development. Authorization code + PKCE; password grant enabled for convenience in this dev realm only.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8080/docs/*", "http://127.0.0.1:8080/docs/*"],
+      "webOrigins": ["http://localhost:8080", "http://127.0.0.1:8080"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/docs/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "rostwerk-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "rostwerk-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "rostwerk-agent",
+      "name": "Demo agent",
+      "description": "Confidential client for machine identities (client credentials grant).",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "rostwerk-agent-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "rostwerk-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "rostwerk-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "a11ce000-0000-4000-8000-000000000001",
+      "username": "alice",
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Example",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "alice", "temporary": false }]
+    },
+    {
+      "id": "a6e47000-0000-4000-8000-000000000001",
+      "username": "service-account-rostwerk-agent",
+      "enabled": true,
+      "serviceAccountClientId": "rostwerk-agent"
+    }
+  ]
+}

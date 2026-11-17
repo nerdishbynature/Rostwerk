@@ -10,6 +10,8 @@
 //! tests skip, unless ROSTWERK_REQUIRE_DB=1 (set this in CI), then they fail.
 #![allow(dead_code)]
 
+pub mod idp;
+
 use std::str::FromStr;
 
 use axum::Router;
@@ -37,6 +39,16 @@ pub struct Harness {
 }
 
 pub async fn harness() -> Option<Harness> {
+    harness_with(AuthConfig {
+        dev_tokens: true,
+        admin_token: Some(ADMIN.into()),
+        ..Default::default()
+    })
+    .await
+}
+
+/// Like [`harness`], with the given auth configuration.
+pub async fn harness_with(auth: AuthConfig) -> Option<Harness> {
     dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.env")).ok();
     let (Ok(url), Ok(admin_url)) = (
         std::env::var("DATABASE_URL"),
@@ -65,10 +77,6 @@ pub async fn harness() -> Option<Harness> {
         .connect_with(app_opts.database(&database.name))
         .await
         .expect("connect app to test database");
-    let auth = AuthConfig {
-        dev_tokens: true,
-        admin_token: Some(ADMIN.into()),
-    };
     let db = Db::new(app_pool.clone());
     let app = app(db.clone(), registry(), auth);
     Some(Harness {
@@ -156,10 +164,25 @@ pub async fn call(
     token: &str,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
+    call_with(app, method, uri, token, &[], body).await
+}
+
+/// Like [`call`], with extra request headers.
+pub async fn call_with(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    token: &str,
+    headers: &[(&str, &str)],
+    body: Option<Value>,
+) -> (StatusCode, Value) {
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
         .header(header::AUTHORIZATION, format!("Bearer {token}"));
+    for (name, value) in headers {
+        req = req.header(*name, *value);
+    }
     let body = match body {
         Some(json) => {
             req = req.header(header::CONTENT_TYPE, "application/json");

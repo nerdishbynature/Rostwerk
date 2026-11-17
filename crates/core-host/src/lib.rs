@@ -5,6 +5,7 @@
 //! answers 404 for modules the tenant has not enabled.
 
 pub mod audit;
+pub mod members;
 pub mod outbox;
 mod registry;
 pub mod tenants;

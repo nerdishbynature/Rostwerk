@@ -14,6 +14,8 @@ pub enum Error {
     #[error("forbidden")]
     Forbidden,
     #[error("{0}")]
+    BadRequest(String),
+    #[error("{0}")]
     Validation(String),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
@@ -25,6 +27,7 @@ impl Error {
             Error::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Error::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Error::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+            Error::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Error::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed"),
             Error::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         }
