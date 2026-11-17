@@ -39,6 +39,7 @@ sqlx = { version = "0.8", default-features = false, features = [
     "json",
     "macros",
     "migrate",
+    "rust_decimal",
 ] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }

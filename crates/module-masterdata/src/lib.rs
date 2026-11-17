@@ -1,5 +1,6 @@
-//! Master data module: business partners (customers and suppliers).
+//! Master data module: business partners (customers and suppliers) and articles.
 
+mod articles;
 mod partners;
 
 use core_host::{CoreState, Module, ModuleManifest};
@@ -17,7 +18,7 @@ impl Module for Masterdata {
             id: MODULE_ID,
             name: "Stammdaten",
             version: env!("CARGO_PKG_VERSION"),
-            description: "Business partners: customers and suppliers",
+            description: "Business partners (customers and suppliers) and articles",
         }
     }
 
@@ -29,5 +30,7 @@ impl Module for Masterdata {
         OpenApiRouter::new()
             .routes(routes!(partners::list, partners::create))
             .routes(routes!(partners::get, partners::update))
+            .routes(routes!(articles::list, articles::create))
+            .routes(routes!(articles::get, articles::update))
     }
 }
