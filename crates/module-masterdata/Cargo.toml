@@ -3,6 +3,8 @@ name = "module-masterdata"
 description = "Rostwerk module: master data (business partners)"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 publish.workspace = true
 
 [dependencies]

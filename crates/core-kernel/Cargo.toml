@@ -3,6 +3,8 @@ name = "core-kernel"
 description = "Rostwerk kernel: tenant context, tenant-scoped database access, IDs, money, errors"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 publish.workspace = true
 
 [dependencies]

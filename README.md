@@ -95,4 +95,15 @@ so they fail instead.
 
 ## License
 
-To be decided.
+Rostwerk's code is licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. You may run, host, modify and sell services around it, including commercially.
+
+The name "Rostwerk", its logos and the look of its official user interfaces are covered
+separately by the [brand licence](LICENSE-BRAND): build on the code freely, but don't
+present a modified product as Rostwerk without asking.
+
+Contributions are accepted under the same terms; see [CONTRIBUTING.md](CONTRIBUTING.md).

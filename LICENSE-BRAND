@@ -1,0 +1,67 @@
+Rostwerk Brand Licence
+
+Copyright (c) 2026 the Rostwerk maintainers.
+
+Rostwerk's source code is open source under the MIT License or the Apache
+License 2.0, at your option (LICENSE-MIT, LICENSE-APACHE). Nothing in this
+licence limits what you may do with that code.
+
+This licence covers something else: Rostwerk's identity. Anyone may build on
+Rostwerk's code, run it, change it and sell services around it. What they may
+not do without the maintainers' agreement is present their product as
+Rostwerk or make it look like Rostwerk.
+
+1. What this licence covers ("the Brand Material")
+
+   a. The name "Rostwerk" and names confusingly similar to it.
+   b. Logos, icons, wordmarks and other marks of the project.
+   c. The files in the `brand/` directory, and any other path listed in
+      section 6.
+   d. The distinctive visual design of Rostwerk's official user interfaces:
+      their combination of layout, colour scheme, typography, iconography and
+      theme, as shipped in the paths listed in section 6.
+
+   Source code is not Brand Material, except the files listed in section 6.
+   Functionality, APIs, data formats, protocols and workflows are never Brand
+   Material and may be reproduced freely.
+
+2. What you may do without asking
+
+   a. Use, run and host Rostwerk, including commercially, for yourself, your
+      company or your customers, under the name "Rostwerk", as long as the
+      code you run is unmodified or only changed in configuration.
+   b. Refer to the project truthfully: "based on Rostwerk", "a fork of
+      Rostwerk", "compatible with Rostwerk", "Rostwerk hosting by <you>",
+      "<your module> for Rostwerk".
+   c. Use the name and logos in articles, talks, tutorials, reviews and
+      documentation about Rostwerk.
+   d. Distribute modified versions under a name of your own that is not
+      confusingly similar to "Rostwerk", while stating that they are based on
+      Rostwerk.
+
+3. What needs the maintainers' agreement
+
+   a. Naming a product, service, company or domain "Rostwerk" or something
+      confusingly similar, other than as allowed in section 2.
+   b. Distributing or offering a modified version under the name "Rostwerk"
+      or with the project's logos.
+   c. Using the Brand Material in a way that suggests your product, service or
+      company is official, endorsed or certified by the Rostwerk project.
+   d. Reusing the visual design described in 1(d), or the files listed in
+      section 6, for a product that is not Rostwerk.
+
+4. Requests
+
+   Ask the maintainers through the project's issue tracker or the contact
+   given in README.md. Permission is given in writing and may be limited in
+   scope or time.
+
+5. No other rights, no warranty
+
+   This licence grants no rights beyond those stated here, and none in any
+   registered trademark except as stated here. The Brand Material is provided
+   "as is", without warranty of any kind.
+
+6. Paths that hold Brand Material
+
+   - brand/
