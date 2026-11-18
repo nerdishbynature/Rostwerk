@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use core_host::outbox;
+use core_host::{SystemRole, outbox};
 use core_kernel::Db;
 use rostwerk_api::{AuthConfig, app, registry};
 use sqlx::postgres::PgPoolOptions;
@@ -22,6 +22,8 @@ async fn main() -> anyhow::Result<()> {
     let bind = std::env::var("BIND").unwrap_or_else(|_| "127.0.0.1:8080".into());
 
     let registry = registry();
+    let system_role = SystemRole::from_env()?;
+    tracing::info!(%system_role, "system role");
 
     // Migrations run as the owner role; the app itself runs as a role subject to RLS.
     let admin_pool = PgPoolOptions::new()
@@ -72,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, "rostwerk listening");
-    axum::serve(listener, app(db, registry, auth)).await?;
+    axum::serve(listener, app(db, registry, auth, system_role)).await?;
     Ok(())
 }
 

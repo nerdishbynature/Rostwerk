@@ -7,6 +7,7 @@
 pub mod audit;
 pub mod bus;
 pub mod dry_run;
+pub mod ext;
 pub mod members;
 pub mod outbox;
 mod registry;
@@ -19,6 +20,7 @@ use utoipa_axum::router::OpenApiRouter;
 
 pub use bus::{Bus, Operation, OperationInfo, OperationKind, OperationSchema, Operations};
 pub use dry_run::DryRun;
+pub use ext::{ExtEntities, ExtSchema, ExtensibleEntity, SystemRole};
 pub use registry::ModuleRegistry;
 
 /// State shared by all routes.
@@ -27,6 +29,10 @@ pub struct CoreState {
     pub db: Db,
     /// Queries and commands of all modules.
     pub bus: Bus,
+    /// Entities of all modules that can have custom fields.
+    pub ext_entities: ExtEntities,
+    /// Dev, QAS or PROD: whether customizing may be changed directly.
+    pub system_role: SystemRole,
 }
 
 /// Static description of a module.
@@ -56,6 +62,12 @@ pub trait Module: Send + Sync + 'static {
 
     /// Queries and commands this module offers to other modules via the [`Bus`].
     fn operations(&self, _ops: &mut Operations) {}
+
+    /// Entities that tenants can add custom fields to, see [`ext`]. Names
+    /// must be `<module id>.<entity>` and never change.
+    fn extensible_entities(&self) -> Vec<ExtensibleEntity> {
+        Vec::new()
+    }
 }
 
 /// Plain router type that the host hands to the application.
