@@ -7,8 +7,6 @@ use core_kernel::{Currency, Error, Money, Result, TenantCtx, new_id};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::postgres::PgRow;
-use sqlx::{FromRow, Row};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -73,25 +71,44 @@ pub struct Article {
     pub updated_at: DateTime<Utc>,
 }
 
-impl FromRow<'_, PgRow> for Article {
-    fn from_row(row: &PgRow) -> sqlx::Result<Self> {
-        let currency: String = row.try_get("sales_price_currency")?;
-        let currency: Currency = currency.parse().map_err(|err| sqlx::Error::ColumnDecode {
-            index: "sales_price_currency".into(),
-            source: Box::new(err),
-        })?;
+/// An `articles` row as stored; the price is split into amount and currency.
+/// Queries read into this and convert with [`ArticleRow::into_article`].
+struct ArticleRow {
+    id: Uuid,
+    number: String,
+    name: String,
+    kind: ArticleKind,
+    unit: String,
+    sales_price_amount: Decimal,
+    sales_price_currency: String,
+    tax_category: TaxCategory,
+    active: bool,
+    ext: Value,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl ArticleRow {
+    fn into_article(self) -> sqlx::Result<Article> {
+        let currency: Currency =
+            self.sales_price_currency
+                .parse()
+                .map_err(|err| sqlx::Error::ColumnDecode {
+                    index: "sales_price_currency".into(),
+                    source: Box::new(err),
+                })?;
         Ok(Article {
-            id: row.try_get("id")?,
-            number: row.try_get("number")?,
-            name: row.try_get("name")?,
-            kind: row.try_get("kind")?,
-            unit: row.try_get("unit")?,
-            sales_price_net: Money::new(row.try_get("sales_price_amount")?, currency),
-            tax_category: row.try_get("tax_category")?,
-            active: row.try_get("active")?,
-            ext: row.try_get("ext")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
+            id: self.id,
+            number: self.number,
+            name: self.name,
+            kind: self.kind,
+            unit: self.unit,
+            sales_price_net: Money::new(self.sales_price_amount, currency),
+            tax_category: self.tax_category,
+            active: self.active,
+            ext: self.ext,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
         })
     }
 }
@@ -126,9 +143,6 @@ pub struct ArticleListParams {
     /// Page size, 1 to 500. Default 50.
     pub limit: Option<i64>,
 }
-
-const COLUMNS: &str = "id, number, name, kind, unit, sales_price_amount, sales_price_currency, \
-                       tax_category, active, ext, created_at, updated_at";
 
 fn non_empty<'a>(field: &str, value: &'a str) -> Result<&'a str> {
     let value = value.trim();
@@ -193,16 +207,23 @@ pub async fn list(
 
     let mut tx = ctx.begin(&state.db).await?;
     // One extra row tells whether another page exists.
-    let mut items = sqlx::query_as::<_, Article>(&format!(
-        "SELECT {COLUMNS} FROM articles
+    let mut items = sqlx::query_as!(
+        ArticleRow,
+        r#"SELECT id, number, name, kind AS "kind: ArticleKind", unit, sales_price_amount,
+                   sales_price_currency, tax_category AS "tax_category: TaxCategory", active,
+                   ext, created_at, updated_at
+         FROM articles
          WHERE ($1::uuid IS NULL OR id > $1)
          ORDER BY id
-         LIMIT $2"
-    ))
-    .bind(params.after)
-    .bind(limit + 1)
+         LIMIT $2"#,
+        params.after,
+        limit + 1,
+    )
     .fetch_all(tx.conn())
-    .await?;
+    .await?
+    .into_iter()
+    .map(ArticleRow::into_article)
+    .collect::<sqlx::Result<Vec<_>>>()?;
     tx.commit().await?;
 
     let next_cursor = if items.len() as i64 > limit {
@@ -239,26 +260,30 @@ pub async fn create(
     check_ext(&ext)?;
 
     let mut tx = ctx.begin(&state.db).await?;
-    let article = sqlx::query_as::<_, Article>(&format!(
-        "INSERT INTO articles (id, tenant_id, number, name, kind, unit, sales_price_amount,
+    let article = sqlx::query_as!(
+        ArticleRow,
+        r#"INSERT INTO articles (id, tenant_id, number, name, kind, unit, sales_price_amount,
                                sales_price_currency, tax_category, active, ext)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING {COLUMNS}"
-    ))
-    .bind(new_id())
-    .bind(tx.tenant_id())
-    .bind(number)
-    .bind(name)
-    .bind(new.kind)
-    .bind(unit)
-    .bind(new.sales_price_net.amount)
-    .bind(new.sales_price_net.currency.as_str())
-    .bind(new.tax_category)
-    .bind(new.active.unwrap_or(true))
-    .bind(ext)
+         RETURNING id, number, name, kind AS "kind: ArticleKind", unit, sales_price_amount,
+                   sales_price_currency, tax_category AS "tax_category: TaxCategory", active,
+                   ext, created_at, updated_at"#,
+        new_id(),
+        tx.tenant_id().0,
+        number,
+        name,
+        new.kind as ArticleKind,
+        unit,
+        new.sales_price_net.amount,
+        new.sales_price_net.currency.as_str(),
+        new.tax_category as TaxCategory,
+        new.active.unwrap_or(true),
+        ext,
+    )
     .fetch_one(tx.conn())
     .await
-    .map_err(number_conflict)?;
+    .map_err(number_conflict)?
+    .into_article()?;
     tx.publish("masterdata.article.created", &article).await?;
     tx.commit().await?;
 
@@ -323,8 +348,9 @@ pub async fn update(
     }
 
     let mut tx = ctx.begin(&state.db).await?;
-    let article = sqlx::query_as::<_, Article>(&format!(
-        "UPDATE articles SET
+    let article = sqlx::query_as!(
+        ArticleRow,
+        r#"UPDATE articles SET
              number = coalesce($2, number),
              name = coalesce($3, name),
              kind = coalesce($4, kind),
@@ -336,22 +362,25 @@ pub async fn update(
              ext = coalesce($10, ext),
              updated_at = now()
          WHERE id = $1
-         RETURNING {COLUMNS}"
-    ))
-    .bind(id)
-    .bind(number)
-    .bind(name)
-    .bind(changes.kind)
-    .bind(unit)
-    .bind(changes.sales_price_net.map(|p| p.amount))
-    .bind(changes.sales_price_net.map(|p| p.currency.to_string()))
-    .bind(changes.tax_category)
-    .bind(changes.active)
-    .bind(changes.ext)
+         RETURNING id, number, name, kind AS "kind: ArticleKind", unit, sales_price_amount,
+                   sales_price_currency, tax_category AS "tax_category: TaxCategory", active,
+                   ext, created_at, updated_at"#,
+        id,
+        number,
+        name,
+        changes.kind as Option<ArticleKind>,
+        unit,
+        changes.sales_price_net.map(|p| p.amount),
+        changes.sales_price_net.map(|p| p.currency.to_string()),
+        changes.tax_category as Option<TaxCategory>,
+        changes.active,
+        changes.ext,
+    )
     .fetch_optional(tx.conn())
     .await
     .map_err(number_conflict)?
-    .ok_or(Error::NotFound)?;
+    .ok_or(Error::NotFound)?
+    .into_article()?;
     tx.publish("masterdata.article.updated", &article).await?;
     tx.commit().await?;
 
@@ -372,11 +401,18 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Article>> {
     let mut tx = ctx.begin(&state.db).await?;
-    let article =
-        sqlx::query_as::<_, Article>(&format!("SELECT {COLUMNS} FROM articles WHERE id = $1"))
-            .bind(id)
-            .fetch_optional(tx.conn())
-            .await?;
+    let article = sqlx::query_as!(
+        ArticleRow,
+        r#"SELECT id, number, name, kind AS "kind: ArticleKind", unit, sales_price_amount,
+                   sales_price_currency, tax_category AS "tax_category: TaxCategory", active,
+                   ext, created_at, updated_at
+         FROM articles WHERE id = $1"#,
+        id,
+    )
+    .fetch_optional(tx.conn())
+    .await?
+    .map(ArticleRow::into_article)
+    .transpose()?;
     tx.commit().await?;
 
     article.map(Json).ok_or(Error::NotFound)

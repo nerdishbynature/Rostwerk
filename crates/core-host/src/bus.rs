@@ -286,7 +286,7 @@ impl Bus {
 
         let mut tx = ctx.begin(&self.db).await?;
         if entry.info.kind == OperationKind::Query {
-            sqlx::query("SET TRANSACTION READ ONLY")
+            sqlx::query!("SET TRANSACTION READ ONLY")
                 .execute(tx.conn())
                 .await?;
         }

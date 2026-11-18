@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE articles SET\n             number = coalesce($2, number),\n             name = coalesce($3, name),\n             kind = coalesce($4, kind),\n             unit = coalesce($5, unit),\n             sales_price_amount = coalesce($6, sales_price_amount),\n             sales_price_currency = coalesce($7, sales_price_currency),\n             tax_category = coalesce($8, tax_category),\n             active = coalesce($9, active),\n             ext = coalesce($10, ext),\n             updated_at = now()\n         WHERE id = $1\n         RETURNING id, number, name, kind AS \"kind: ArticleKind\", unit, sales_price_amount,\n                   sales_price_currency, tax_category AS \"tax_category: TaxCategory\", active,\n                   ext, created_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "kind: ArticleKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "sales_price_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "sales_price_currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "tax_category: TaxCategory",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "ext",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Numeric",
+        "Bpchar",
+        "Text",
+        "Bool",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c34a756ab9118feec4f0c81a3571f14059bc4c0bcf23a8c4a7db9a538aaf148b"
+}

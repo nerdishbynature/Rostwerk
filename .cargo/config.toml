@@ -1,0 +1,5 @@
+[env]
+# sqlx::query! macros check SQL against .sqlx/ instead of a live database, so the
+# workspace builds without Postgres. scripts/sqlx-prepare.sh regenerates .sqlx/;
+# it sets SQLX_OFFLINE=false itself, which takes precedence over this default.
+SQLX_OFFLINE = "true"

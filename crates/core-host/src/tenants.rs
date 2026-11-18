@@ -22,35 +22,38 @@ pub struct NewTenant {
 }
 
 pub async fn create(db: &Db, new: NewTenant) -> Result<Tenant> {
-    let tenant = sqlx::query_as::<_, Tenant>(
+    let tenant = sqlx::query_as!(
+        Tenant,
         "INSERT INTO tenants (id, name, modules) VALUES ($1, $2, $3)
          RETURNING id, name, modules, created_at",
+        new_id(),
+        new.name.trim(),
+        &new.modules,
     )
-    .bind(new_id())
-    .bind(new.name.trim())
-    .bind(&new.modules)
     .fetch_one(db.system_pool())
     .await?;
     Ok(tenant)
 }
 
 pub async fn find(db: &Db, id: TenantId) -> Result<Option<Tenant>> {
-    let tenant = sqlx::query_as::<_, Tenant>(
+    let tenant = sqlx::query_as!(
+        Tenant,
         "SELECT id, name, modules, created_at FROM tenants WHERE id = $1",
+        id.0,
     )
-    .bind(id)
     .fetch_optional(db.system_pool())
     .await?;
     Ok(tenant)
 }
 
 pub async fn set_modules(db: &Db, id: TenantId, modules: &[String]) -> Result<Option<Tenant>> {
-    let tenant = sqlx::query_as::<_, Tenant>(
+    let tenant = sqlx::query_as!(
+        Tenant,
         "UPDATE tenants SET modules = $2 WHERE id = $1
          RETURNING id, name, modules, created_at",
+        id.0,
+        modules,
     )
-    .bind(id)
-    .bind(modules)
     .fetch_optional(db.system_pool())
     .await?;
     Ok(tenant)

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id AS tenant_id, t.modules, m.kind AS \"kind: MemberKind\"\n         FROM tenant_members m JOIN tenants t ON t.id = m.tenant_id\n         WHERE m.subject = $1 AND ($2::uuid IS NULL OR m.tenant_id = $2)\n         ORDER BY t.id\n         LIMIT 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "modules",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind: MemberKind",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b640c84eed1f080275691c9dbbb30c4d0615873e6202f989caae290d4ec15ede"
+}
