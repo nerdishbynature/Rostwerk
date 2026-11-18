@@ -1,0 +1,21 @@
+[package]
+name = "module-accounting"
+description = "Rostwerk module: accounting (chart of accounts, double-entry journal)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-host.workspace = true
+core-kernel.workspace = true
+
+axum.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+uuid.workspace = true

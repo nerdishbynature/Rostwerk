@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.currency,\n                  coalesce(sum(l.amount) FILTER (WHERE l.side = 'debit'), 0) AS \"debit!: Decimal\",\n                  coalesce(sum(l.amount) FILTER (WHERE l.side = 'credit'), 0) AS \"credit!: Decimal\"\n         FROM journal_lines l\n         JOIN journal_entries e ON e.id = l.entry_id\n         WHERE l.account_id = $1\n           AND e.status = 'posted'\n           AND ($2::date IS NULL OR e.booking_date <= $2)\n         GROUP BY l.currency\n         ORDER BY l.currency",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "debit!: Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "credit!: Decimal",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "fd0b10b696839dcf7e6ca9889ce5ff62cf23191e93089ea2610b581cf77ee1d5"
+}

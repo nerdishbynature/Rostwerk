@@ -270,5 +270,9 @@ async fn every_write_endpoint_documents_dry_run() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 4, "partners and articles: create and update");
+    assert_eq!(
+        checked, 12,
+        "partners and articles: create and update; accounts: create, update, delete; \
+         entries: create, update, delete, post, reverse"
+    );
 }

@@ -21,7 +21,9 @@ pub use auth::{AuthConfig, OidcVerifier, TENANT_HEADER};
 
 /// All modules compiled into this binary.
 pub fn registry() -> ModuleRegistry {
-    ModuleRegistry::new().register(module_masterdata::Masterdata)
+    ModuleRegistry::new()
+        .register(module_masterdata::Masterdata)
+        .register(module_accounting::Accounting)
 }
 
 #[derive(OpenApi)]
