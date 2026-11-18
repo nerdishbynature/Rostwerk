@@ -1,8 +1,9 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::Response;
 use chrono::{DateTime, Utc};
-use core_host::CoreState;
+use core_host::{CoreState, DryRun};
 use core_kernel::{Currency, Error, Money, Result, TenantCtx, new_id};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -240,6 +241,7 @@ pub async fn list(
     post,
     path = "/v1/articles",
     tag = "masterdata",
+    params(DryRun),
     request_body = NewArticle,
     responses(
         (status = 201, body = Article),
@@ -250,8 +252,9 @@ pub async fn list(
 pub async fn create(
     State(state): State<CoreState>,
     ctx: TenantCtx,
+    dry_run: DryRun,
     Json(new): Json<NewArticle>,
-) -> Result<(StatusCode, Json<Article>)> {
+) -> Result<Response> {
     let number = non_empty("number", &new.number)?;
     let name = non_empty("name", &new.name)?;
     let unit = non_empty("unit", &new.unit)?;
@@ -285,9 +288,7 @@ pub async fn create(
     .map_err(number_conflict)?
     .into_article()?;
     tx.publish("masterdata.article.created", &article).await?;
-    tx.commit().await?;
-
-    Ok((StatusCode::CREATED, Json(article)))
+    dry_run.respond(tx, StatusCode::CREATED, article).await
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -310,7 +311,7 @@ pub struct ArticleChanges {
     patch,
     path = "/v1/articles/{id}",
     tag = "masterdata",
-    params(("id" = Uuid, Path, description = "Article id")),
+    params(("id" = Uuid, Path, description = "Article id"), DryRun),
     request_body = ArticleChanges,
     responses(
         (status = 200, body = Article),
@@ -323,8 +324,9 @@ pub async fn update(
     State(state): State<CoreState>,
     ctx: TenantCtx,
     Path(id): Path<Uuid>,
+    dry_run: DryRun,
     Json(changes): Json<ArticleChanges>,
-) -> Result<Json<Article>> {
+) -> Result<Response> {
     let number = changes
         .number
         .as_deref()
@@ -382,9 +384,7 @@ pub async fn update(
     .ok_or(Error::NotFound)?
     .into_article()?;
     tx.publish("masterdata.article.updated", &article).await?;
-    tx.commit().await?;
-
-    Ok(Json(article))
+    dry_run.respond(tx, StatusCode::OK, article).await
 }
 
 /// Get one article.

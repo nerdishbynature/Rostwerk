@@ -1,8 +1,9 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::Response;
 use chrono::{DateTime, Utc};
-use core_host::CoreState;
+use core_host::{CoreState, DryRun};
 use core_kernel::{Error, Result, TenantCtx, TenantTx, new_id};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,14 +108,16 @@ pub async fn list(
     post,
     path = "/v1/partners",
     tag = "masterdata",
+    params(DryRun),
     request_body = NewPartner,
     responses((status = 201, body = Partner), (status = 422, description = "Invalid input"))
 )]
 pub async fn create(
     State(state): State<CoreState>,
     ctx: TenantCtx,
+    dry_run: DryRun,
     Json(new): Json<NewPartner>,
-) -> Result<(StatusCode, Json<Partner>)> {
+) -> Result<Response> {
     let name = new.name.trim();
     if name.is_empty() {
         return Err(Error::Validation("name must not be empty".into()));
@@ -140,9 +143,7 @@ pub async fn create(
     .fetch_one(tx.conn())
     .await?;
     tx.publish("masterdata.partner.created", &partner).await?;
-    tx.commit().await?;
-
-    Ok((StatusCode::CREATED, Json(partner)))
+    dry_run.respond(tx, StatusCode::CREATED, partner).await
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -161,7 +162,7 @@ pub struct PartnerChanges {
     patch,
     path = "/v1/partners/{id}",
     tag = "masterdata",
-    params(("id" = Uuid, Path, description = "Partner id")),
+    params(("id" = Uuid, Path, description = "Partner id"), DryRun),
     request_body = PartnerChanges,
     responses(
         (status = 200, body = Partner),
@@ -173,8 +174,9 @@ pub async fn update(
     State(state): State<CoreState>,
     ctx: TenantCtx,
     Path(id): Path<Uuid>,
+    dry_run: DryRun,
     Json(changes): Json<PartnerChanges>,
-) -> Result<Json<Partner>> {
+) -> Result<Response> {
     let name = changes.name.as_deref().map(str::trim);
     if name.is_some_and(str::is_empty) {
         return Err(Error::Validation("name must not be empty".into()));
@@ -209,9 +211,7 @@ pub async fn update(
     .await?
     .ok_or(Error::NotFound)?;
     tx.publish("masterdata.partner.updated", &partner).await?;
-    tx.commit().await?;
-
-    Ok(Json(partner))
+    dry_run.respond(tx, StatusCode::OK, partner).await
 }
 
 /// Get one partner.

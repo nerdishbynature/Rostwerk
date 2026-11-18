@@ -106,6 +106,31 @@ curl -X DELETE localhost:8080/admin/tenants/<tenant-id>/members/<sub> -H 'Author
   it. The event id is sent as `Nats-Msg-Id`, so JetStream drops redeliveries within its
   duplicate window (2 minutes by default); consumers should still dedupe on `id`.
 
+### Dry runs
+
+Every write endpoint under `/v1` can be previewed: send `Prefer: dry-run` and the call
+runs exactly as usual (validation, database constraints, audit trigger, events) and is
+then rolled back, so nothing is stored. The response has the status the real call
+would return, the header `Preference-Applied: dry-run`, and the body
+
+```json
+{ "result": { "...": "the normal response body" },
+  "events": [{ "topic": "masterdata.partner.created", "payload": { "...": "..." } }] }
+```
+
+Errors come back exactly as for a real call. Endpoints without dry-run support (admin)
+ignore the preference and send no `Preference-Applied`, so check for that header.
+
+```bash
+curl -i -X POST localhost:8080/v1/partners -H 'Prefer: dry-run' \
+  -H 'Authorization: Bearer dev:<tenant-id>:alice' -H 'content-type: application/json' \
+  -d '{"name":"ACME","kind":"customer"}'
+```
+
+In a module, a write handler takes the `core_host::DryRun` extractor, adds `params(DryRun)`
+to its `#[utoipa::path]`, and ends with `dry_run.respond(tx, status, body)` instead of
+`tx.commit()`. A test fails if a `/v1` write endpoint does not declare it.
+
 ## Getting started
 
 Requirements: Rust (stable), Docker or Podman with `docker-compose`.
