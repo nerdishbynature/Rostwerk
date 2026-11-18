@@ -49,14 +49,26 @@ jobs:
     env:
       DATABASE_URL: postgres://rostwerk_app:rostwerk_app@localhost:5432/rostwerk
       DATABASE_ADMIN_URL: postgres://rostwerk_admin:rostwerk_admin@localhost:5432/rostwerk
-      # Fail instead of skipping when the database is not reachable.
+      NATS_URL: nats://localhost:4222
+      # Fail instead of skipping when the database or NATS is not reachable.
       ROSTWERK_REQUIRE_DB: "1"
+      ROSTWERK_REQUIRE_NATS: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Create application role
         env:
           PGPASSWORD: rostwerk_admin
         run: psql -h localhost -U rostwerk_admin -d rostwerk -v ON_ERROR_STOP=1 -f docker/postgres/init/01-app-role.sql
+      # Service containers cannot take arguments, so NATS (with -js) is started here.
+      - name: Start NATS JetStream
+        run: |
+          docker run -d --name nats -p 4222:4222 -p 8222:8222 nats:2 -js -m 8222
+          for _ in $(seq 30); do
+            curl -sf 'http://localhost:8222/healthz?js-enabled-only=true' && exit 0
+            sleep 1
+          done
+          docker logs nats
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
