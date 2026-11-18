@@ -1,0 +1,3 @@
+CREATE TRIGGER articles_audit
+    AFTER INSERT OR UPDATE OR DELETE ON articles
+    FOR EACH ROW EXECUTE FUNCTION rostwerk_audit();

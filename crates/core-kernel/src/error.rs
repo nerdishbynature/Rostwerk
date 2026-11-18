@@ -17,6 +17,9 @@ pub enum Error {
     BadRequest(String),
     #[error("{0}")]
     Validation(String),
+    /// The request clashes with existing data, e.g. a duplicate number.
+    #[error("{0}")]
+    Conflict(String),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -29,6 +32,7 @@ impl Error {
             Error::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Error::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Error::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed"),
+            Error::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             Error::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         }
     }

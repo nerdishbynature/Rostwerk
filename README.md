@@ -15,7 +15,7 @@ and each tenant can switch them on or off.
 crates/
   core-kernel/        TenantCtx, tenant-scoped transactions (RLS), IDs, Money, errors
   core-host/          Module trait, module registry, per-tenant module gate, tenant registry
-  module-masterdata/  Business partners (customers, suppliers)
+  module-masterdata/  Business partners (customers, suppliers) and articles
 apps/
   api-server/         Binds core and modules into one HTTP service (`rostwerk` binary)
 docker/               Postgres init (application role), Keycloak dev realm
