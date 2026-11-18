@@ -49,10 +49,24 @@ async fn main() -> anyhow::Result<()> {
 
     let db = Db::new(pool);
 
-    // Outbox relay. Events go to the log until NATS is wired in.
+    // Outbox relay: to NATS JetStream if NATS_URL is set, otherwise to the log.
+    let sink: Arc<dyn outbox::EventSink> = match std::env::var("NATS_URL") {
+        Ok(url) if !url.is_empty() => {
+            let sink = event_nats::NatsSink::connect(&url).await?;
+            tracing::info!(
+                stream = event_nats::STREAM,
+                "publishing events to NATS JetStream"
+            );
+            Arc::new(sink)
+        }
+        _ => {
+            tracing::info!("publishing events to the log (NATS_URL not set)");
+            Arc::new(outbox::LogSink)
+        }
+    };
     tokio::spawn(outbox::run_relay(
         db.clone(),
-        Arc::new(outbox::LogSink),
+        sink,
         Duration::from_millis(500),
     ));
 

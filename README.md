@@ -96,8 +96,15 @@ curl -X DELETE localhost:8080/admin/tenants/<tenant-id>/members/<sub> -H 'Author
   and tenant-scoped. Read it via `GET /v1/audit`.
 - **Outbox:** modules call `tx.publish(topic, &payload)` inside their tenant
   transaction. The event is stored only if the transaction commits. A relay moves
-  events to an `EventSink` (the log for now, NATS later) with at-least-once delivery.
-  Topic convention: `<module>.<entity>.<event>`, e.g. `masterdata.partner.created`.
+  events to an `EventSink` with at-least-once delivery. Topic convention:
+  `<module>.<entity>.<event>`, e.g. `masterdata.partner.created`.
+- **Events on NATS:** with `NATS_URL` set, the relay publishes to NATS JetStream
+  (crate `event-nats`); without it, events go to the log. On startup the stream
+  `ROSTWERK` with subjects `rostwerk.>` is created if missing. Each event is published
+  on `rostwerk.<tenant_id>.<topic>` as JSON (`id`, `tenant_id`, `topic`, `payload`,
+  `actor`, `occurred_at`), and the relay marks it published only after JetStream acked
+  it. The event id is sent as `Nats-Msg-Id`, so JetStream drops redeliveries within its
+  duplicate window (2 minutes by default); consumers should still dedupe on `id`.
 
 ## Getting started
 
@@ -193,7 +200,8 @@ the test, and the integration tests start a fake issuer on a local port that ser
 discovery and a JWKS. Keycloak is not needed in CI.
 
 Without database URLs the tests are skipped. In CI set `ROSTWERK_REQUIRE_DB=1`
-so they fail instead.
+so they fail instead. The NATS tests also need `NATS_URL` and are skipped without it,
+unless `ROSTWERK_REQUIRE_NATS=1`.
 
 ## Configuration
 
@@ -202,6 +210,7 @@ so they fail instead.
 | `DATABASE_URL` | App connection, role subject to RLS |
 | `DATABASE_ADMIN_URL` | Connection used for migrations |
 | `BIND` | Listen address, default `127.0.0.1:8080` |
+| `NATS_URL` | NATS server for outbox events, e.g. `nats://localhost:4222`. Unset logs events instead |
 | `ROSTWERK_DEV_AUTH` | `1` accepts `dev:<tenant>:<user>` bearer tokens. Development only |
 | `ROSTWERK_ADMIN_TOKEN` | Bearer token for `/admin`. Unset disables the admin API |
 | `ROSTWERK_OIDC_ISSUER` | OIDC issuer URL, exactly as in the tokens' `iss`. Unset disables OIDC |

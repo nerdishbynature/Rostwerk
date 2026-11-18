@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 core-host.workspace = true
 core-kernel.workspace = true
+event-nats.workspace = true
 module-masterdata.workspace = true
 
 anyhow.workspace = true
@@ -36,6 +37,8 @@ utoipa.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+async-nats.workspace = true
+futures-util = "0.3"
 base64.workspace = true
 http-body-util.workspace = true
 p256.workspace = true
