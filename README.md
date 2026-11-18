@@ -133,6 +133,32 @@ to its `#[utoipa::path]`, and ends with `dry_run.respond(tx, status, body)` inst
 Commands of other modules are called with `bus.command_in(&ctx, &mut tx, ...)`, so they
 run in the handler's transaction and are rolled back with it, in a dry run as well.
 
+### Custom fields
+
+Modules declare which entities are extensible (`GET /v1/ext-entities`, e.g.
+`masterdata.partner`). Each tenant defines fields on them, identified by entity and key,
+never by a generated id, so a field is the same on every system:
+
+```bash
+curl -X PUT localhost:8080/v1/ext-fields/masterdata.partner/credit_limit \
+  -H 'Authorization: Bearer dev:<tenant-id>:alice' -H 'content-type: application/json' \
+  -d '{"type":"decimal","label":"Credit limit","required":false}'
+```
+
+Types: `string`, `number`, `decimal` (string, e.g. `"1500.00"`), `boolean`, `date`
+(`YYYY-MM-DD`) and `enum` (with `enum_values`). Keys match `^[a-z][a-z0-9_]{0,62}$`;
+`schema` is reserved. `PUT` creates or replaces and is idempotent: the same definition
+again changes nothing. Values go into the entity's `ext` object and are validated on
+every write (`422` naming the field, e.g. `ext.credit_limit: must be a decimal string`).
+`GET /v1/ext-fields/{entity}/schema` returns the effective JSON Schema.
+
+Changing a definition does not migrate stored values. Removing a field keeps its values
+in the database, but they are no longer returned; defining it again brings them back.
+
+Customizing can be changed directly only on a Dev system (`ROSTWERK_SYSTEM_ROLE=dev`).
+QAS and PROD answer `PUT`/`DELETE /v1/ext-fields/...` with `409`: they receive
+customizing only through transports. Reads and business data are unaffected.
+
 ## Getting started
 
 Requirements: Rust (stable), Docker or Podman with `docker-compose`.
@@ -243,6 +269,7 @@ unless `ROSTWERK_REQUIRE_NATS=1`.
 | `ROSTWERK_OIDC_ISSUER` | OIDC issuer URL, exactly as in the tokens' `iss`. Unset disables OIDC |
 | `ROSTWERK_OIDC_AUDIENCE` | Required `aud` value of access tokens, e.g. `rostwerk-api` |
 | `ROSTWERK_OIDC_DOCS_CLIENT_ID` | Public client `/docs` signs in with, e.g. `rostwerk-docs` |
+| `ROSTWERK_SYSTEM_ROLE` | `dev` (default), `qas` or `prod`. Only `dev` allows changing customizing (custom fields) directly; `qas` and `prod` answer `409` |
 
 ## Contributing
 

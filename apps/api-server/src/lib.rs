@@ -8,7 +8,7 @@ use std::sync::Arc;
 use axum::response::Html;
 use axum::routing::get;
 use axum::{Json, Router, middleware};
-use core_host::{CoreState, ModuleRegistry};
+use core_host::{CoreState, ModuleRegistry, SystemRole};
 use core_kernel::Db;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
@@ -121,14 +121,21 @@ fn docs_html(docs_client_id: Option<&str>) -> String {
 const OAUTH2_REDIRECT_HTML: &str = include_str!("../assets/oauth2-redirect.html");
 
 /// Builds the full application router.
-pub fn app(db: Db, registry: ModuleRegistry, auth: AuthConfig) -> Router {
+pub fn app(db: Db, registry: ModuleRegistry, auth: AuthConfig, system_role: SystemRole) -> Router {
     let bus = registry.bus(db.clone());
-    let state = CoreState { db, bus };
+    let state = CoreState {
+        db,
+        bus,
+        ext_entities: registry.ext_entities(),
+        system_role,
+    };
     let auth = Arc::new(auth);
     let registry = Arc::new(registry);
 
     let (module_routes, module_api) = registry.router();
-    let (core_routes, core_api) = core_host::audit::routes().split_for_parts();
+    let (core_routes, core_api) = core_host::audit::routes()
+        .merge(core_host::ext::routes())
+        .split_for_parts();
     let mut openapi = ApiDoc::openapi();
     add_security(&mut openapi, &auth);
     let docs = docs_html(auth.docs_login.as_ref().map(|l| l.client_id.as_str()));

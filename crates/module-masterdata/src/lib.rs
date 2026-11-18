@@ -4,7 +4,7 @@ mod articles;
 mod ops;
 mod partners;
 
-use core_host::{CoreState, Module, ModuleManifest, Operations};
+use core_host::{CoreState, ExtensibleEntity, Module, ModuleManifest, Operations};
 use sqlx::migrate::Migrator;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -37,5 +37,18 @@ impl Module for Masterdata {
 
     fn operations(&self, ops: &mut Operations) {
         ops::register(ops);
+    }
+
+    fn extensible_entities(&self) -> Vec<ExtensibleEntity> {
+        vec![
+            ExtensibleEntity {
+                name: partners::ENTITY,
+                label: "Business partner",
+            },
+            ExtensibleEntity {
+                name: articles::ENTITY,
+                label: "Article",
+            },
+        ]
     }
 }

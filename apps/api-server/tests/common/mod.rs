@@ -17,7 +17,7 @@ use std::str::FromStr;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use core_host::ModuleRegistry;
+use core_host::{ModuleRegistry, SystemRole};
 use core_kernel::Db;
 use http_body_util::BodyExt;
 use rostwerk_api::{AuthConfig, app, registry};
@@ -57,6 +57,28 @@ pub async fn harness_with(auth: AuthConfig) -> Option<Harness> {
 /// Used for test modules; `registry` is called once for migrations and once
 /// for the app.
 pub async fn harness_for(registry: fn() -> ModuleRegistry, auth: AuthConfig) -> Option<Harness> {
+    build(registry, auth, SystemRole::Dev).await
+}
+
+/// Like [`harness`], on a server with the given system role.
+pub async fn harness_with_role(role: SystemRole) -> Option<Harness> {
+    build(
+        registry,
+        AuthConfig {
+            dev_tokens: true,
+            admin_token: Some(ADMIN.into()),
+            ..Default::default()
+        },
+        role,
+    )
+    .await
+}
+
+async fn build(
+    registry: fn() -> ModuleRegistry,
+    auth: AuthConfig,
+    role: SystemRole,
+) -> Option<Harness> {
     dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.env")).ok();
     let (Ok(url), Ok(admin_url)) = (
         std::env::var("DATABASE_URL"),
@@ -86,7 +108,7 @@ pub async fn harness_for(registry: fn() -> ModuleRegistry, auth: AuthConfig) -> 
         .await
         .expect("connect app to test database");
     let db = Db::new(app_pool.clone());
-    let app = app(db.clone(), registry(), auth);
+    let app = app(db.clone(), registry(), auth, role);
     Some(Harness {
         app,
         app_pool,

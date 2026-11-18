@@ -17,7 +17,7 @@ async fn tenants_are_isolated() {
         "POST",
         "/v1/partners",
         &token(&a),
-        Some(json!({ "name": "ACME GmbH", "kind": "customer", "ext": { "segment": "A" } })),
+        Some(json!({ "name": "ACME GmbH", "kind": "customer" })),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{partner}");
