@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.status AS \"status: EntryStatus\", e.sequence_no, e.booking_date,\n                  e.document_ref, e.description, e.reverses_id,\n                  (SELECT r.id FROM journal_entries r WHERE r.reverses_id = e.id) AS \"reversed_by_id?\",\n                  e.posted_at, e.created_at, e.updated_at\n         FROM journal_entries e\n         WHERE ($1::uuid IS NULL OR e.id > $1)\n           AND ($2::text IS NULL OR e.status = $2)\n         ORDER BY e.id\n         LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "status: EntryStatus",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence_no",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "booking_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "document_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "reverses_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "reversed_by_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "posted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      null,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "aa726139fed6c587081318b0f687973580f4c108f40dd08fad2b26225eb44a9e"
+}

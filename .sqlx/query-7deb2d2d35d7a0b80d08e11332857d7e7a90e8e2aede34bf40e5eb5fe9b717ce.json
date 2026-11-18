@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM journal_lines WHERE entry_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7deb2d2d35d7a0b80d08e11332857d7e7a90e8e2aede34bf40e5eb5fe9b717ce"
+}

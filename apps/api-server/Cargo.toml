@@ -19,6 +19,7 @@ core-host.workspace = true
 core-kernel.workspace = true
 event-nats.workspace = true
 module-masterdata.workspace = true
+module-accounting.workspace = true
 
 anyhow.workspace = true
 dotenvy = "0.15"

@@ -47,6 +47,7 @@ dependencies = [
  "futures-util",
  "http-body-util",
  "jsonwebtoken",
+ "module-accounting",
  "module-masterdata",
  "p256 0.13.2",
  "rand_core 0.6.4",
@@ -1528,6 +1529,22 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "module-accounting"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "core-host",
+ "core-kernel",
+ "rust_decimal",
+ "serde",
+ "sqlx",
+ "utoipa",
+ "utoipa-axum",
+ "uuid",
 ]
 
 [[package]]

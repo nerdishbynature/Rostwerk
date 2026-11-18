@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO journal_sequences (tenant_id, last_no) VALUES ($1, 1)\n         ON CONFLICT (tenant_id) DO UPDATE SET last_no = journal_sequences.last_no + 1\n         RETURNING last_no",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_no",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "423293c81fe1b4cb8c07f45971f57530e2adb2aacfb13d116f58a79f96d8d149"
+}

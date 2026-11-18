@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE journal_entries SET\n           booking_date = coalesce($2, booking_date),\n           document_ref = coalesce($3, document_ref),\n           description = coalesce($4, description),\n           updated_at = now()\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efdc41fd7a0f8e35740e5fadf153c7df6107299ab4a5835590de565beac1eb65"
+}
