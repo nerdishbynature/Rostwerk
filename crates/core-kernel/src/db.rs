@@ -112,6 +112,44 @@ impl TenantTx {
         Ok(id)
     }
 
+    /// Opens a savepoint, so that work done after it can be undone with
+    /// [`TenantTx::rollback_to`] without giving up the whole transaction.
+    ///
+    /// Savepoints nest: every savepoint must be released or rolled back
+    /// before the one opened before it.
+    pub async fn savepoint(&mut self) -> Result<Savepoint> {
+        sqlx::query!("SAVEPOINT rostwerk_savepoint")
+            .execute(&mut *self.tx)
+            .await?;
+        Ok(Savepoint {
+            events: self.events.len(),
+        })
+    }
+
+    /// Keeps the work done since `savepoint`.
+    pub async fn release(&mut self, _savepoint: Savepoint) -> Result<()> {
+        sqlx::query!("RELEASE SAVEPOINT rostwerk_savepoint")
+            .execute(&mut *self.tx)
+            .await?;
+        Ok(())
+    }
+
+    /// Undoes the work done since `savepoint`: its rows, audit entries and
+    /// outbox events are gone and its events are no longer recorded. The
+    /// transaction is usable again, even after a failed statement.
+    pub async fn rollback_to(&mut self, savepoint: Savepoint) -> Result<()> {
+        // Postgres resolves the name to the most recent savepoint with that name,
+        // which is `savepoint` as long as savepoints are used in nested order.
+        sqlx::query!("ROLLBACK TO SAVEPOINT rostwerk_savepoint")
+            .execute(&mut *self.tx)
+            .await?;
+        sqlx::query!("RELEASE SAVEPOINT rostwerk_savepoint")
+            .execute(&mut *self.tx)
+            .await?;
+        self.events.truncate(savepoint.events);
+        Ok(())
+    }
+
     /// Commits the transaction.
     pub async fn commit(self) -> Result<()> {
         self.tx.commit().await?;
@@ -131,6 +169,14 @@ impl TenantTx {
         }
         Ok(self.events)
     }
+}
+
+/// A savepoint in a [`TenantTx`], from [`TenantTx::savepoint`].
+#[must_use = "release or roll back a savepoint"]
+#[derive(Debug)]
+pub struct Savepoint {
+    /// Number of events recorded before the savepoint.
+    events: usize,
 }
 
 /// A cross-tenant transaction for core jobs. See [`Db::begin_system`].

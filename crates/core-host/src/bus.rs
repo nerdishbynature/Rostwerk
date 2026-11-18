@@ -13,11 +13,37 @@
 //! needs. The same JSON form, with the JSON Schemas from
 //! [`Bus::operations`], is what agent tool specs are generated from.
 //!
-//! Every call runs in the caller's [`TenantCtx`]: the bus opens a
-//! [`TenantTx`] for the caller's tenant (RLS is armed), runs the handler in it
-//! and commits on success. Queries get a read-only transaction; commands get a
-//! read-write one, so they can change data and [`TenantTx::publish`] events
-//! atomically. A failed handler rolls everything back.
+//! Every call runs in the caller's [`TenantCtx`], so RLS is armed for the
+//! caller's tenant. Queries run read-only; commands may change data and
+//! [`TenantTx::publish`] events.
+//!
+//! # Transactions
+//!
+//! [`Bus::query`], [`Bus::command`] and [`Bus::call_json`] open their own
+//! [`TenantTx`] and commit it when the handler succeeds. Use them where there
+//! is no transaction yet, e.g. for an agent tool call.
+//!
+//! A write handler that already holds a [`TenantTx`] calls other modules'
+//! commands with [`Bus::command_in`] instead. The command then runs in the
+//! caller's transaction, so the caller and the command commit or roll back
+//! together:
+//!
+//! - If the caller fails after the command succeeded, the command's changes
+//!   and events are rolled back too.
+//! - In a dry run ([`DryRun`](crate::DryRun)) nothing of the command is
+//!   persisted, and its events appear in the dry-run response.
+//! - If the command itself fails, only its own work is undone (it runs in a
+//!   savepoint); the caller gets the error and may handle it and go on.
+//!
+//! ```ignore
+//! let mut tx = ctx.begin(&state.db).await?;
+//! let order = /* insert the order */;
+//! let reserved: Reserved = state.bus.command_in(&ctx, &mut tx, "stock.item.reserve", &req).await?;
+//! dry_run.respond(tx, StatusCode::CREATED, order).await
+//! ```
+//!
+//! [`Bus::command`] commits on its own: calling it from a write handler would
+//! persist the command even if the handler fails or is a dry run.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -79,8 +105,9 @@ pub trait Operation: Send + Sync + 'static {
     type Request: DeserializeOwned + ToSchema + Send;
     type Response: Serialize + ToSchema;
 
-    /// Runs the operation in the caller's tenant transaction. The bus commits
-    /// it if this returns `Ok`, and rolls it back otherwise.
+    /// Runs the operation in a tenant transaction. If this returns an error,
+    /// everything it did in `tx` is rolled back. See [the module docs](self)
+    /// for when the transaction is committed.
     fn run(
         &self,
         tx: &mut TenantTx,
@@ -226,36 +253,47 @@ impl Bus {
         infos
     }
 
-    /// Runs a query. Fails with [`Error::NotFound`] if no query of that name
+    /// Runs a query in its own read-only transaction. Fails with [`Error::NotFound`] if no query of that name
     /// exists or the tenant has not enabled its module.
     pub async fn query<Req, Resp>(&self, ctx: &TenantCtx, name: &str, req: &Req) -> Result<Resp>
     where
         Req: Serialize + ?Sized,
         Resp: DeserializeOwned,
     {
-        self.typed(ctx, Some(OperationKind::Query), name, req).await
+        let req = to_request(name, req)?;
+        let resp = self
+            .dispatch(ctx, Some(OperationKind::Query), name, req)
+            .await?;
+        from_response(name, resp)
     }
 
-    /// Runs a command. Fails with [`Error::NotFound`] if no command of that
-    /// name exists or the tenant has not enabled its module.
+    /// Runs a command in its own transaction and commits it. Fails with
+    /// [`Error::NotFound`] if no command of that name exists or the tenant has
+    /// not enabled its module.
+    ///
+    /// From a handler that holds a [`TenantTx`], use [`Bus::command_in`].
     pub async fn command<Req, Resp>(&self, ctx: &TenantCtx, name: &str, req: &Req) -> Result<Resp>
     where
         Req: Serialize + ?Sized,
         Resp: DeserializeOwned,
     {
-        self.typed(ctx, Some(OperationKind::Command), name, req)
-            .await
+        let req = to_request(name, req)?;
+        let resp = self
+            .dispatch(ctx, Some(OperationKind::Command), name, req)
+            .await?;
+        from_response(name, resp)
     }
 
-    /// Runs a query or command with a JSON request, e.g. from an agent tool call.
-    pub async fn call_json(&self, ctx: &TenantCtx, name: &str, req: Value) -> Result<Value> {
-        self.dispatch(ctx, None, name, req).await
-    }
-
-    async fn typed<Req, Resp>(
+    /// Runs a command in the caller's transaction `tx`, so it commits or rolls
+    /// back together with the caller's own changes (see [the module docs](self)).
+    /// If the command fails, its work is undone and `tx` stays usable.
+    ///
+    /// Fails with [`Error::NotFound`] like [`Bus::command`], and with
+    /// [`Error::Forbidden`] if `tx` belongs to another tenant than `ctx`.
+    pub async fn command_in<Req, Resp>(
         &self,
         ctx: &TenantCtx,
-        kind: Option<OperationKind>,
+        tx: &mut TenantTx,
         name: &str,
         req: &Req,
     ) -> Result<Resp>
@@ -263,12 +301,42 @@ impl Bus {
         Req: Serialize + ?Sized,
         Resp: DeserializeOwned,
     {
-        let req = serde_json::to_value(req)
-            .map_err(|e| Error::Validation(format!("{name} request: {e}")))?;
-        let resp = self.dispatch(ctx, kind, name, req).await?;
-        serde_json::from_value(resp).map_err(|e| Error::Validation(format!("{name} response: {e}")))
+        if tx.tenant_id() != ctx.tenant_id() {
+            return Err(Error::Forbidden);
+        }
+        let entry = self.entry(ctx, Some(OperationKind::Command), name)?;
+        let req = to_request(name, req)?;
+
+        let savepoint = tx.savepoint().await?;
+        match entry.handler.call(tx, req).await {
+            Ok(resp) => {
+                tx.release(savepoint).await?;
+                from_response(name, resp)
+            }
+            Err(err) => {
+                tx.rollback_to(savepoint).await?;
+                Err(err)
+            }
+        }
     }
 
+    /// Runs a query or command with a JSON request, e.g. from an agent tool
+    /// call, in its own transaction.
+    pub async fn call_json(&self, ctx: &TenantCtx, name: &str, req: Value) -> Result<Value> {
+        self.dispatch(ctx, None, name, req).await
+    }
+
+    /// The operation `name` of `kind` (any if `None`), if the tenant may use it.
+    fn entry(&self, ctx: &TenantCtx, kind: Option<OperationKind>, name: &str) -> Result<&Entry> {
+        self.ops
+            .get(name)
+            .filter(|e| kind.is_none_or(|k| e.info.kind == k))
+            // Same rule as the HTTP gate: a disabled module does not exist for the tenant.
+            .filter(|e| ctx.has_module(e.info.module))
+            .ok_or(Error::NotFound)
+    }
+
+    /// Runs an operation in a new transaction and commits it on success.
     async fn dispatch(
         &self,
         ctx: &TenantCtx,
@@ -276,14 +344,7 @@ impl Bus {
         name: &str,
         req: Value,
     ) -> Result<Value> {
-        let entry = self
-            .ops
-            .get(name)
-            .filter(|e| kind.is_none_or(|k| e.info.kind == k))
-            // Same rule as the HTTP gate: a disabled module does not exist for the tenant.
-            .filter(|e| ctx.has_module(e.info.module))
-            .ok_or(Error::NotFound)?;
-
+        let entry = self.entry(ctx, kind, name)?;
         let mut tx = ctx.begin(&self.db).await?;
         if entry.info.kind == OperationKind::Query {
             sqlx::query!("SET TRANSACTION READ ONLY")
@@ -295,4 +356,12 @@ impl Bus {
         tx.commit().await?;
         Ok(resp)
     }
+}
+
+fn to_request<Req: Serialize + ?Sized>(name: &str, req: &Req) -> Result<Value> {
+    serde_json::to_value(req).map_err(|e| Error::Validation(format!("{name} request: {e}")))
+}
+
+fn from_response<Resp: DeserializeOwned>(name: &str, resp: Value) -> Result<Resp> {
+    serde_json::from_value(resp).map_err(|e| Error::Validation(format!("{name} response: {e}")))
 }

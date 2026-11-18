@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "ROLLBACK TO SAVEPOINT rostwerk_savepoint",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "84fc511899659f04c1dd18c9efd53dcaa027f541a63d9119ded3ade8c9d4caf3"
+}

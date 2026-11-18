@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "RELEASE SAVEPOINT rostwerk_savepoint",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "31a4011612ef8b3faa754000951bcc3b16f566345a991a70a95a48d3aad59ce4"
+}

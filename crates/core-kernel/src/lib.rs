@@ -10,7 +10,7 @@ mod id;
 mod money;
 mod tenant;
 
-pub use db::{Db, RecordedEvent, SystemTx, TenantTx};
+pub use db::{Db, RecordedEvent, Savepoint, SystemTx, TenantTx};
 pub use error::{Error, Result};
 pub use id::{TenantId, new_id};
 pub use money::{Currency, Money};
