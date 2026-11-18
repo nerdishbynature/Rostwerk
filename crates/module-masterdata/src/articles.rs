@@ -3,13 +3,16 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use chrono::{DateTime, Utc};
-use core_host::{CoreState, DryRun};
+use core_host::{CoreState, DryRun, ExtSchema};
 use core_kernel::{Currency, Error, Money, Result, TenantCtx, new_id};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
+
+/// Extensible entity name, for custom fields.
+pub const ENTITY: &str = "masterdata.article";
 
 const DEFAULT_LIMIT: i64 = 50;
 const MAX_LIMIT: i64 = 500;
@@ -65,7 +68,7 @@ pub struct Article {
     pub sales_price_net: Money,
     pub tax_category: TaxCategory,
     pub active: bool,
-    /// Custom fields of the tenant.
+    /// Custom fields of the tenant, see `GET /v1/ext-fields/masterdata.article/schema`.
     #[schema(value_type = Object)]
     pub ext: Value,
     pub created_at: DateTime<Utc>,
@@ -125,6 +128,7 @@ pub struct NewArticle {
     pub tax_category: TaxCategory,
     /// Default `true`.
     pub active: Option<bool>,
+    /// Custom fields, validated against `GET /v1/ext-fields/masterdata.article/schema`.
     #[schema(value_type = Option<Object>)]
     pub ext: Option<Value>,
 }
@@ -167,13 +171,6 @@ fn check_price(price: &Money) -> Result<()> {
     }
     if amount.trunc() >= Decimal::from(10_i64.pow(PRICE_INTEGER_DIGITS)) {
         return Err(Error::Validation("sales_price_net is too large".into()));
-    }
-    Ok(())
-}
-
-fn check_ext(ext: &Value) -> Result<()> {
-    if !ext.is_object() {
-        return Err(Error::Validation("ext must be a JSON object".into()));
     }
     Ok(())
 }
@@ -225,7 +222,11 @@ pub async fn list(
     .into_iter()
     .map(ArticleRow::into_article)
     .collect::<sqlx::Result<Vec<_>>>()?;
+    let ext = ExtSchema::load(&mut tx, ENTITY).await?;
     tx.commit().await?;
+    for article in &mut items {
+        article.ext = ext.visible(std::mem::take(&mut article.ext));
+    }
 
     let next_cursor = if items.len() as i64 > limit {
         items.truncate(limit as usize);
@@ -260,10 +261,11 @@ pub async fn create(
     let unit = non_empty("unit", &new.unit)?;
     check_price(&new.sales_price_net)?;
     let ext = new.ext.unwrap_or_else(|| Value::Object(Default::default()));
-    check_ext(&ext)?;
 
     let mut tx = ctx.begin(&state.db).await?;
-    let article = sqlx::query_as!(
+    let schema = ExtSchema::load(&mut tx, ENTITY).await?;
+    schema.validate(&ext)?;
+    let mut article = sqlx::query_as!(
         ArticleRow,
         r#"INSERT INTO articles (id, tenant_id, number, name, kind, unit, sales_price_amount,
                                sales_price_currency, tax_category, active, ext)
@@ -287,6 +289,7 @@ pub async fn create(
     .await
     .map_err(number_conflict)?
     .into_article()?;
+    article.ext = schema.visible(article.ext);
     tx.publish("masterdata.article.created", &article).await?;
     dry_run.respond(tx, StatusCode::CREATED, article).await
 }
@@ -301,7 +304,8 @@ pub struct ArticleChanges {
     pub sales_price_net: Option<Money>,
     pub tax_category: Option<TaxCategory>,
     pub active: Option<bool>,
-    /// Replaces all custom fields.
+    /// Replaces all custom fields; validated against
+    /// `GET /v1/ext-fields/masterdata.article/schema`.
     #[schema(value_type = Option<Object>)]
     pub ext: Option<Value>,
 }
@@ -345,12 +349,13 @@ pub async fn update(
     if let Some(price) = &changes.sales_price_net {
         check_price(price)?;
     }
-    if let Some(ext) = &changes.ext {
-        check_ext(ext)?;
-    }
 
     let mut tx = ctx.begin(&state.db).await?;
-    let article = sqlx::query_as!(
+    let schema = ExtSchema::load(&mut tx, ENTITY).await?;
+    if let Some(ext) = &changes.ext {
+        schema.validate(ext)?;
+    }
+    let mut article = sqlx::query_as!(
         ArticleRow,
         r#"UPDATE articles SET
              number = coalesce($2, number),
@@ -383,6 +388,7 @@ pub async fn update(
     .map_err(number_conflict)?
     .ok_or(Error::NotFound)?
     .into_article()?;
+    article.ext = schema.visible(article.ext);
     tx.publish("masterdata.article.updated", &article).await?;
     dry_run.respond(tx, StatusCode::OK, article).await
 }
@@ -412,8 +418,13 @@ pub async fn get(
     .fetch_optional(tx.conn())
     .await?
     .map(ArticleRow::into_article)
-    .transpose()?;
+    .transpose()?
+    .ok_or(Error::NotFound)?;
+    let schema = ExtSchema::load(&mut tx, ENTITY).await?;
     tx.commit().await?;
 
-    article.map(Json).ok_or(Error::NotFound)
+    Ok(Json(Article {
+        ext: schema.visible(article.ext),
+        ..article
+    }))
 }

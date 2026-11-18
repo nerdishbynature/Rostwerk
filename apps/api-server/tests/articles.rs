@@ -19,6 +19,21 @@ fn article(number: &str) -> Value {
     })
 }
 
+/// A tenant with masterdata and the custom field `color` that [`article`] uses.
+async fn tenant(app: &Router, name: &str, modules: &[&str]) -> String {
+    let t = create_tenant(app, name, modules).await;
+    let (status, body) = call(
+        app,
+        "PUT",
+        "/v1/ext-fields/masterdata.article/color",
+        &token(&t),
+        Some(json!({ "type": "string", "label": "Color" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    t
+}
+
 async fn create(app: &Router, tenant: &str, body: Value) -> (StatusCode, Value) {
     call(app, "POST", "/v1/articles", &token(tenant), Some(body)).await
 }
@@ -26,7 +41,7 @@ async fn create(app: &Router, tenant: &str, body: Value) -> (StatusCode, Value) 
 #[tokio::test]
 async fn crud() {
     let Some(h) = harness().await else { return };
-    let t = create_tenant(&h.app, "Articles CRUD", &["masterdata"]).await;
+    let t = tenant(&h.app, "Articles CRUD", &["masterdata"]).await;
 
     let (status, created) = create(&h.app, &t, article("A-100")).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
@@ -96,7 +111,7 @@ async fn crud() {
 #[tokio::test]
 async fn emits_events_and_audit() {
     let Some(h) = harness().await else { return };
-    let t = create_tenant(&h.app, "Articles events", &["masterdata"]).await;
+    let t = tenant(&h.app, "Articles events", &["masterdata"]).await;
     let (_, created) = create(&h.app, &t, article("E-1")).await;
     let id = created["id"].as_str().unwrap();
     let (status, _) = call(
@@ -110,7 +125,7 @@ async fn emits_events_and_audit() {
     assert_eq!(status, StatusCode::OK);
 
     let events: Vec<(String, Value)> =
-        sqlx::query_as("SELECT topic, payload FROM outbox WHERE tenant_id = $1::uuid ORDER BY id")
+        sqlx::query_as("SELECT topic, payload FROM outbox WHERE tenant_id = $1::uuid AND topic LIKE 'masterdata.%' ORDER BY id")
             .bind(&t)
             .fetch_all(&h.admin_pool)
             .await
@@ -142,8 +157,8 @@ async fn emits_events_and_audit() {
 #[tokio::test]
 async fn duplicate_number_conflicts_only_within_tenant() {
     let Some(h) = harness().await else { return };
-    let a = create_tenant(&h.app, "Articles dup A", &["masterdata"]).await;
-    let b = create_tenant(&h.app, "Articles dup B", &["masterdata"]).await;
+    let a = tenant(&h.app, "Articles dup A", &["masterdata"]).await;
+    let b = tenant(&h.app, "Articles dup B", &["masterdata"]).await;
 
     let (status, _) = create(&h.app, &a, article("D-1")).await;
     assert_eq!(status, StatusCode::CREATED);
@@ -172,8 +187,8 @@ async fn duplicate_number_conflicts_only_within_tenant() {
 #[tokio::test]
 async fn tenants_are_isolated() {
     let Some(h) = harness().await else { return };
-    let a = create_tenant(&h.app, "Articles iso A", &["masterdata"]).await;
-    let b = create_tenant(&h.app, "Articles iso B", &["masterdata"]).await;
+    let a = tenant(&h.app, "Articles iso A", &["masterdata"]).await;
+    let b = tenant(&h.app, "Articles iso B", &["masterdata"]).await;
     let (_, created) = create(&h.app, &a, article("I-1")).await;
     let id = created["id"].as_str().unwrap();
 
@@ -206,7 +221,7 @@ async fn tenants_are_isolated() {
 #[tokio::test]
 async fn paginates_with_cursor() {
     let Some(h) = harness().await else { return };
-    let t = create_tenant(&h.app, "Articles paging", &["masterdata"]).await;
+    let t = tenant(&h.app, "Articles paging", &["masterdata"]).await;
     for i in 0..5 {
         let (status, _) = create(&h.app, &t, article(&format!("P-{i}"))).await;
         assert_eq!(status, StatusCode::CREATED);
@@ -234,7 +249,7 @@ async fn paginates_with_cursor() {
 #[tokio::test]
 async fn rejects_invalid_input() {
     let Some(h) = harness().await else { return };
-    let t = create_tenant(&h.app, "Articles invalid", &["masterdata"]).await;
+    let t = tenant(&h.app, "Articles invalid", &["masterdata"]).await;
 
     let mut cases = Vec::new();
     for (field, value) in [

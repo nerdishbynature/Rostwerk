@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM ext_field_definitions\n         WHERE entity = $1 AND key = $2\n         RETURNING entity, key, type AS \"field_type: FieldType\", required, enum_values, label",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "field_type: FieldType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "required",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "enum_values",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "label",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "40c47112f3a9f6a030768f9a9b12b6492a019650991fa4c440bef766945dcaa2"
+}

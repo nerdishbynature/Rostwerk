@@ -7,6 +7,7 @@ use sqlx::migrate::Migrator;
 use utoipa::openapi::OpenApi;
 
 use crate::bus::{Bus, Entry, OperationInfo, Operations};
+use crate::ext::{ExtEntities, ExtEntityInfo, check_entity_name};
 use crate::{HostRouter, Module, ModuleManifest};
 
 /// Migrations of the core itself (tenant registry).
@@ -25,12 +26,33 @@ impl ModuleRegistry {
         Self::default()
     }
 
+    /// Adds a module.
+    ///
+    /// # Panics
+    ///
+    /// If a module with the same id is registered already, or one of its
+    /// extensible entities is not named `<module id>.<entity>`.
     pub fn register(mut self, module: impl Module) -> Self {
         let id = module.manifest().id;
         assert!(
             self.modules.iter().all(|m| m.manifest().id != id),
             "module {id} registered twice"
         );
+        let mut names: Vec<_> = module
+            .extensible_entities()
+            .iter()
+            .map(|e| e.name)
+            .collect();
+        for name in &names {
+            assert!(
+                check_entity_name(id, name),
+                "extensible entity {name} must be named {id}.<entity> (lower case, digits, _)"
+            );
+        }
+        names.sort_unstable();
+        if let Some(dup) = names.windows(2).find(|w| w[0] == w[1]) {
+            panic!("extensible entity {} declared twice", dup[0]);
+        }
         self.modules.push(Box::new(module));
         self
     }
@@ -57,6 +79,20 @@ impl ModuleRegistry {
             tracing::info!(module = id, "migrations applied");
         }
         Ok(())
+    }
+
+    /// The extensible entities of all modules.
+    pub fn ext_entities(&self) -> ExtEntities {
+        ExtEntities::new(self.modules.iter().flat_map(|m| {
+            let module = m.manifest().id;
+            m.extensible_entities()
+                .into_iter()
+                .map(move |e| ExtEntityInfo {
+                    name: e.name,
+                    module,
+                    label: e.label,
+                })
+        }))
     }
 
     /// The query and command bus over all modules' operations.

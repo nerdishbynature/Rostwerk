@@ -3,12 +3,15 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use chrono::{DateTime, Utc};
-use core_host::{CoreState, DryRun};
+use core_host::{CoreState, DryRun, ExtSchema};
 use core_kernel::{Error, Result, TenantCtx, TenantTx, new_id};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
+
+/// Extensible entity name, for custom fields.
+pub const ENTITY: &str = "masterdata.partner";
 
 const DEFAULT_LIMIT: i64 = 50;
 const MAX_LIMIT: i64 = 500;
@@ -28,7 +31,7 @@ pub struct Partner {
     pub name: String,
     pub kind: PartnerKind,
     pub email: Option<String>,
-    /// Custom fields of the tenant.
+    /// Custom fields of the tenant, see `GET /v1/ext-fields/masterdata.partner/schema`.
     #[schema(value_type = Object)]
     pub ext: Value,
     pub created_at: DateTime<Utc>,
@@ -40,6 +43,7 @@ pub struct NewPartner {
     pub name: String,
     pub kind: PartnerKind,
     pub email: Option<String>,
+    /// Custom fields, validated against `GET /v1/ext-fields/masterdata.partner/schema`.
     #[schema(value_type = Option<Object>)]
     pub ext: Option<Value>,
 }
@@ -92,7 +96,11 @@ pub async fn list(
     )
     .fetch_all(tx.conn())
     .await?;
+    let ext = ExtSchema::load(&mut tx, ENTITY).await?;
     tx.commit().await?;
+    for partner in &mut items {
+        partner.ext = ext.visible(std::mem::take(&mut partner.ext));
+    }
 
     let next_cursor = if items.len() as i64 > limit {
         items.truncate(limit as usize);
@@ -123,12 +131,11 @@ pub async fn create(
         return Err(Error::Validation("name must not be empty".into()));
     }
     let ext = new.ext.unwrap_or_else(|| Value::Object(Default::default()));
-    if !ext.is_object() {
-        return Err(Error::Validation("ext must be a JSON object".into()));
-    }
 
     let mut tx = ctx.begin(&state.db).await?;
-    let partner = sqlx::query_as!(
+    let schema = ExtSchema::load(&mut tx, ENTITY).await?;
+    schema.validate(&ext)?;
+    let mut partner = sqlx::query_as!(
         Partner,
         r#"INSERT INTO partners (id, tenant_id, name, kind, email, ext)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -142,6 +149,7 @@ pub async fn create(
     )
     .fetch_one(tx.conn())
     .await?;
+    partner.ext = schema.visible(partner.ext);
     tx.publish("masterdata.partner.created", &partner).await?;
     dry_run.respond(tx, StatusCode::CREATED, partner).await
 }
@@ -152,7 +160,8 @@ pub struct PartnerChanges {
     pub kind: Option<PartnerKind>,
     /// Empty string removes the email.
     pub email: Option<String>,
-    /// Replaces all custom fields.
+    /// Replaces all custom fields; validated against
+    /// `GET /v1/ext-fields/masterdata.partner/schema`.
     #[schema(value_type = Option<Object>)]
     pub ext: Option<Value>,
 }
@@ -181,16 +190,17 @@ pub async fn update(
     if name.is_some_and(str::is_empty) {
         return Err(Error::Validation("name must not be empty".into()));
     }
-    if changes.ext.as_ref().is_some_and(|ext| !ext.is_object()) {
-        return Err(Error::Validation("ext must be a JSON object".into()));
-    }
     // None = keep, Some(None) = clear, Some(Some(x)) = set.
     let email = changes
         .email
         .map(|e| Some(e.trim().to_string()).filter(|e| !e.is_empty()));
 
     let mut tx = ctx.begin(&state.db).await?;
-    let partner = sqlx::query_as!(
+    let schema = ExtSchema::load(&mut tx, ENTITY).await?;
+    if let Some(ext) = &changes.ext {
+        schema.validate(ext)?;
+    }
+    let mut partner = sqlx::query_as!(
         Partner,
         r#"UPDATE partners SET
              name = coalesce($2, name),
@@ -210,6 +220,7 @@ pub async fn update(
     .fetch_optional(tx.conn())
     .await?
     .ok_or(Error::NotFound)?;
+    partner.ext = schema.visible(partner.ext);
     tx.publish("masterdata.partner.updated", &partner).await?;
     dry_run.respond(tx, StatusCode::OK, partner).await
 }
@@ -234,14 +245,22 @@ pub async fn get(
     partner.map(Json).ok_or(Error::NotFound)
 }
 
-/// Loads one partner of the transaction's tenant.
+/// Loads one partner of the transaction's tenant, with its current custom fields.
 pub(crate) async fn find(tx: &mut TenantTx, id: Uuid) -> Result<Option<Partner>> {
-    Ok(sqlx::query_as!(
+    let partner = sqlx::query_as!(
         Partner,
         r#"SELECT id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at
          FROM partners WHERE id = $1"#,
         id,
     )
     .fetch_optional(tx.conn())
-    .await?)
+    .await?;
+    let Some(partner) = partner else {
+        return Ok(None);
+    };
+    let schema = ExtSchema::load(tx, ENTITY).await?;
+    Ok(Some(Partner {
+        ext: schema.visible(partner.ext),
+        ..partner
+    }))
 }

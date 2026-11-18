@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT entity, key, type AS \"field_type: FieldType\", required, enum_values, label\n             FROM ext_field_definitions\n             WHERE entity = $1\n             ORDER BY key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "field_type: FieldType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "required",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "enum_values",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "label",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e2c1dcb3a2af6ecc82cfc4aaa728de3ab62f9dff5b225836da6e2fa4ab89b98f"
+}
