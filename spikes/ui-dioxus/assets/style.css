@@ -1,0 +1,56 @@
+:root {
+  --bg: #f6f7f9; --surface: #fff; --text: #1c2330; --muted: #5f6b7a; --line: #dfe3e8;
+  --accent: #1f5fbf; --accent-soft: #e5eefb; --active: #fff7d6; --error: #b42318;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px;
+  color: var(--text); background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --surface: #1c2027; --text: #e6e9ee; --muted: #98a2b3; --line: #2e3440;
+          --accent: #7aa7ff; --accent-soft: #23314d; --active: #3a3420; --error: #ff8a80; }
+}
+* { box-sizing: border-box; }
+html, body, #main { margin: 0; height: 100%; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topbar { display: flex; align-items: center; gap: 24px; padding: 10px 16px; background: var(--surface);
+          border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 1px solid transparent; background: none; color: var(--muted); padding: 6px 12px;
+       border-radius: 6px; cursor: pointer; font: inherit; }
+.tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+.toolbar { display: flex; gap: 12px; padding: 10px 16px; align-items: end; flex-wrap: wrap; }
+.toolbar.slim { padding: 0 0 8px; align-items: center; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.field.grow { flex: 1; min-width: 200px; }
+.field input, .field select { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); color: var(--text); }
+.field.token input { width: 260px; }
+.content { flex: 1; min-height: 0; padding: 0 16px 12px; display: flex; }
+.grid-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.grid { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--surface);
+        border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.grid-header, .grid-row { display: grid; grid-template-columns: 2fr 1fr 2fr 110px; }
+.grid-header { border-bottom: 1px solid var(--line); font-weight: 600; user-select: none; }
+.header-cell { cursor: pointer; }
+.header-cell:hover { background: var(--accent-soft); }
+.viewport { flex: 1; overflow-y: auto; position: relative; outline: none; }
+.viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.spacer { position: relative; }
+.grid-row { position: absolute; left: 0; right: 0; height: 32px; border-bottom: 1px solid var(--line); }
+.active-row { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.cell { padding: 0 10px; line-height: 32px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell.active { background: var(--active); box-shadow: inset 0 0 0 2px var(--accent); }
+.cell.editing { padding: 0; }
+.cell-input { width: 100%; height: 32px; border: 2px solid var(--accent); padding: 0 8px; font: inherit;
+              background: var(--surface); color: var(--text); outline: none; }
+.cell-input.invalid { border-color: var(--error); }
+.statusbar { display: flex; gap: 16px; padding: 6px 2px 0; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.statusbar .error { color: var(--error); }
+.hint { color: var(--muted); font-size: 12px; }
+.check { display: flex; align-items: center; gap: 6px; margin-right: 16px; }
+.table-scroll { flex: 1; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table.tabular { width: 100%; border-collapse: collapse; }
+table.tabular th { position: sticky; top: 0; background: var(--surface); text-align: left; border-bottom: 1px solid var(--line); }
+table.tabular td { padding: 0 10px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; max-width: 1px; text-overflow: ellipsis; }
+.sort-button { background: none; border: none; font: inherit; font-weight: 600; color: var(--text);
+               padding: 8px 10px; cursor: pointer; width: 100%; text-align: left; }
+.ag-host { flex: 1; min-height: 0; }

@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH keyed AS (\n             SELECT p.*,\n                    CASE $3::text\n                        WHEN 'name' THEN lower(p.name)\n                        WHEN 'email' THEN lower(coalesce(p.email, ''))\n                        WHEN 'kind' THEN p.kind\n                        ELSE ''\n                    END AS sort_key\n             FROM partners p\n           ),\n           cursor AS (SELECT sort_key, id FROM keyed WHERE id = $1)\n         SELECT k.id AS \"id!\", k.name AS \"name!\", k.kind AS \"kind!: PartnerKind\", k.email,\n                k.ext AS \"ext!\", k.created_at AS \"created_at!\", k.updated_at AS \"updated_at!\"\n         FROM keyed k\n         WHERE ($1::uuid IS NULL\n                OR ($4 AND (k.sort_key, k.id) < (SELECT sort_key, id FROM cursor))\n                OR (NOT $4 AND (k.sort_key, k.id) > (SELECT sort_key, id FROM cursor)))\n           AND ($5::text IS NULL\n                OR k.name ILIKE '%' || $5 || '%'\n                OR k.email ILIKE '%' || $5 || '%')\n           AND ($6::text IS NULL OR k.kind = $6 OR k.kind = 'both')\n         ORDER BY CASE WHEN $4 THEN NULL ELSE k.sort_key END ASC,\n                  CASE WHEN $4 THEN k.sort_key END DESC,\n                  CASE WHEN $4 THEN NULL ELSE k.id END ASC,\n                  CASE WHEN $4 THEN k.id END DESC\n         LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!: PartnerKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "ext!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Text",
+        "Bool",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3aff9c11c91d06e9dd44b7aebf2fb8a57d6dd2aa6f4fdab92296caad0a5ab1c0"
+}

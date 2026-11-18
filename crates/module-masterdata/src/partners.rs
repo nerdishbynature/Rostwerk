@@ -58,13 +58,41 @@ pub struct PartnerPage {
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct ListParams {
-    /// Cursor: return partners after this id.
+    /// Cursor: return partners after this id, in the requested order.
     pub after: Option<Uuid>,
     /// Page size, 1 to 500. Default 50.
     pub limit: Option<i64>,
+    /// Case-insensitive substring of name or email.
+    pub q: Option<String>,
+    /// Only partners of this kind; `customer` and `supplier` include `both`.
+    pub kind: Option<PartnerKind>,
+    /// `created` (default), `name`, `email` or `kind`; prefix `-` for descending.
+    pub sort: Option<String>,
 }
 
-/// List partners, ordered by id (creation time), cursor-paginated.
+/// Sort key column and direction of a partner list.
+fn sort_order(sort: Option<&str>) -> Result<(&'static str, bool)> {
+    let sort = sort.unwrap_or("created");
+    let (field, desc) = match sort.strip_prefix('-') {
+        Some(field) => (field, true),
+        None => (sort, false),
+    };
+    let field = match field {
+        "created" => "created",
+        "name" => "name",
+        "email" => "email",
+        "kind" => "kind",
+        _ => {
+            return Err(Error::Validation(
+                "sort must be created, name, email or kind, optionally prefixed with -".into(),
+            ));
+        }
+    };
+    Ok((field, desc))
+}
+
+/// List partners, cursor-paginated. Ordered by creation time unless `sort` says otherwise;
+/// `q` and `kind` filter.
 #[utoipa::path(
     get,
     path = "/v1/partners",
@@ -84,15 +112,44 @@ pub async fn list(
 
     let mut tx = ctx.begin(&state.db).await?;
     // One extra row tells whether another page exists.
+    let (sort, desc) = sort_order(params.sort.as_deref())?;
+    let q = params.q.as_deref().map(str::trim).filter(|q| !q.is_empty());
+    // Keyset pagination over (sort key, id): the cursor stays a partner id.
+    // Ties on the sort key are broken by id in the same direction.
     let mut items = sqlx::query_as!(
         Partner,
-        r#"SELECT id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at
-         FROM partners
-         WHERE ($1::uuid IS NULL OR id > $1)
-         ORDER BY id
+        r#"WITH keyed AS (
+             SELECT p.*,
+                    CASE $3::text
+                        WHEN 'name' THEN lower(p.name)
+                        WHEN 'email' THEN lower(coalesce(p.email, ''))
+                        WHEN 'kind' THEN p.kind
+                        ELSE ''
+                    END AS sort_key
+             FROM partners p
+           ),
+           cursor AS (SELECT sort_key, id FROM keyed WHERE id = $1)
+         SELECT k.id AS "id!", k.name AS "name!", k.kind AS "kind!: PartnerKind", k.email,
+                k.ext AS "ext!", k.created_at AS "created_at!", k.updated_at AS "updated_at!"
+         FROM keyed k
+         WHERE ($1::uuid IS NULL
+                OR ($4 AND (k.sort_key, k.id) < (SELECT sort_key, id FROM cursor))
+                OR (NOT $4 AND (k.sort_key, k.id) > (SELECT sort_key, id FROM cursor)))
+           AND ($5::text IS NULL
+                OR k.name ILIKE '%' || $5 || '%'
+                OR k.email ILIKE '%' || $5 || '%')
+           AND ($6::text IS NULL OR k.kind = $6 OR k.kind = 'both')
+         ORDER BY CASE WHEN $4 THEN NULL ELSE k.sort_key END ASC,
+                  CASE WHEN $4 THEN k.sort_key END DESC,
+                  CASE WHEN $4 THEN NULL ELSE k.id END ASC,
+                  CASE WHEN $4 THEN k.id END DESC
          LIMIT $2"#,
         params.after,
         limit + 1,
+        sort,
+        desc,
+        q,
+        params.kind as Option<PartnerKind>,
     )
     .fetch_all(tx.conn())
     .await?;

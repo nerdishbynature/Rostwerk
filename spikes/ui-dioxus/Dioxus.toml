@@ -1,0 +1,9 @@
+[application]
+name = "rostwerk-ui-spike"
+
+[web.app]
+title = "Rostwerk UI spike"
+
+# The spike API (scripts/api.sh). Same origin for the browser, so no CORS.
+[[web.proxy]]
+backend = "http://127.0.0.1:18080/v1/"
