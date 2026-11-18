@@ -4,6 +4,7 @@ members = [
     "crates/core-kernel",
     "crates/core-host",
     "crates/module-masterdata",
+    "crates/event-nats",
     "apps/api-server",
 ]
 
@@ -18,8 +19,10 @@ publish = false
 core-kernel = { path = "crates/core-kernel" }
 core-host = { path = "crates/core-host" }
 module-masterdata = { path = "crates/module-masterdata" }
+event-nats = { path = "crates/event-nats" }
 
 anyhow = "1"
+async-nats = "0.53"
 axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }

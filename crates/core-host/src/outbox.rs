@@ -27,7 +27,7 @@ pub struct Event {
 
 pub type SinkFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
 
-/// Where events go: NATS later, a log for now, a collector in tests.
+/// Where events go: NATS JetStream (`event-nats`), the log, a collector in tests.
 pub trait EventSink: Send + Sync {
     fn publish<'a>(&'a self, event: &'a Event) -> SinkFuture<'a>;
 }
