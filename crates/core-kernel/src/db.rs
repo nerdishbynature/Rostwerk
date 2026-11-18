@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::Value;
 use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -45,6 +46,7 @@ impl Db {
             tx,
             tenant_id,
             actor: actor.to_string(),
+            events: Vec::new(),
         })
     }
 
@@ -65,6 +67,14 @@ pub struct TenantTx {
     tx: Transaction<'static, Postgres>,
     tenant_id: TenantId,
     actor: String,
+    events: Vec<RecordedEvent>,
+}
+
+/// An event recorded with [`TenantTx::publish`], as returned by [`TenantTx::finish`].
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RecordedEvent {
+    pub topic: String,
+    pub payload: Value,
 }
 
 impl TenantTx {
@@ -95,12 +105,31 @@ impl TenantTx {
         )
         .execute(&mut *self.tx)
         .await?;
+        self.events.push(RecordedEvent {
+            topic: topic.to_string(),
+            payload,
+        });
         Ok(id)
     }
 
+    /// Commits the transaction.
     pub async fn commit(self) -> Result<()> {
         self.tx.commit().await?;
         Ok(())
+    }
+
+    /// Commits the transaction, or rolls it back if `dry_run` is set. Either way
+    /// returns the events published in it, in order.
+    ///
+    /// A rolled-back transaction leaves nothing behind: no rows, no audit
+    /// entries (written by trigger in the same transaction), no outbox events.
+    pub async fn finish(self, dry_run: bool) -> Result<Vec<RecordedEvent>> {
+        if dry_run {
+            self.tx.rollback().await?;
+        } else {
+            self.tx.commit().await?;
+        }
+        Ok(self.events)
     }
 }
 

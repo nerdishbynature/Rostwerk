@@ -6,6 +6,7 @@
 
 pub mod audit;
 pub mod bus;
+pub mod dry_run;
 pub mod members;
 pub mod outbox;
 mod registry;
@@ -17,6 +18,7 @@ use sqlx::migrate::Migrator;
 use utoipa_axum::router::OpenApiRouter;
 
 pub use bus::{Bus, Operation, OperationInfo, OperationKind, OperationSchema, Operations};
+pub use dry_run::DryRun;
 pub use registry::ModuleRegistry;
 
 /// State shared by all routes.
