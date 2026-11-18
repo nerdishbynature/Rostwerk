@@ -17,6 +17,7 @@ use std::str::FromStr;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use core_host::ModuleRegistry;
 use core_kernel::Db;
 use http_body_util::BodyExt;
 use rostwerk_api::{AuthConfig, app, registry};
@@ -49,6 +50,13 @@ pub async fn harness() -> Option<Harness> {
 
 /// Like [`harness`], with the given auth configuration.
 pub async fn harness_with(auth: AuthConfig) -> Option<Harness> {
+    harness_for(registry, auth).await
+}
+
+/// Like [`harness_with`], with the modules of `registry` instead of the app's.
+/// Used for test modules; `registry` is called once for migrations and once
+/// for the app.
+pub async fn harness_for(registry: fn() -> ModuleRegistry, auth: AuthConfig) -> Option<Harness> {
     dotenvy::from_path(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.env")).ok();
     let (Ok(url), Ok(admin_url)) = (
         std::env::var("DATABASE_URL"),

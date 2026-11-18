@@ -130,6 +130,8 @@ curl -i -X POST localhost:8080/v1/partners -H 'Prefer: dry-run' \
 In a module, a write handler takes the `core_host::DryRun` extractor, adds `params(DryRun)`
 to its `#[utoipa::path]`, and ends with `dry_run.respond(tx, status, body)` instead of
 `tx.commit()`. A test fails if a `/v1` write endpoint does not declare it.
+Commands of other modules are called with `bus.command_in(&ctx, &mut tx, ...)`, so they
+run in the handler's transaction and are rolled back with it, in a dry run as well.
 
 ## Getting started
 
