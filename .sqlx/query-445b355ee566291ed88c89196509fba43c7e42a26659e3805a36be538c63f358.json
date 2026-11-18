@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE outbox SET published_at = now(), attempts = attempts + 1 WHERE id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "445b355ee566291ed88c89196509fba43c7e42a26659e3805a36be538c63f358"
+}

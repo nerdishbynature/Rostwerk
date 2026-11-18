@@ -21,7 +21,7 @@ pub enum PartnerKind {
     Both,
 }
 
-#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Partner {
     pub id: Uuid,
     pub name: String,
@@ -59,8 +59,6 @@ pub struct ListParams {
     pub limit: Option<i64>,
 }
 
-const COLUMNS: &str = "id, name, kind, email, ext, created_at, updated_at";
-
 /// List partners, ordered by id (creation time), cursor-paginated.
 #[utoipa::path(
     get,
@@ -81,14 +79,16 @@ pub async fn list(
 
     let mut tx = ctx.begin(&state.db).await?;
     // One extra row tells whether another page exists.
-    let mut items = sqlx::query_as::<_, Partner>(&format!(
-        "SELECT {COLUMNS} FROM partners
+    let mut items = sqlx::query_as!(
+        Partner,
+        r#"SELECT id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at
+         FROM partners
          WHERE ($1::uuid IS NULL OR id > $1)
          ORDER BY id
-         LIMIT $2"
-    ))
-    .bind(params.after)
-    .bind(limit + 1)
+         LIMIT $2"#,
+        params.after,
+        limit + 1,
+    )
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
@@ -125,17 +125,18 @@ pub async fn create(
     }
 
     let mut tx = ctx.begin(&state.db).await?;
-    let partner = sqlx::query_as::<_, Partner>(&format!(
-        "INSERT INTO partners (id, tenant_id, name, kind, email, ext)
+    let partner = sqlx::query_as!(
+        Partner,
+        r#"INSERT INTO partners (id, tenant_id, name, kind, email, ext)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING {COLUMNS}"
-    ))
-    .bind(new_id())
-    .bind(tx.tenant_id())
-    .bind(name)
-    .bind(new.kind)
-    .bind(new.email)
-    .bind(ext)
+         RETURNING id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at"#,
+        new_id(),
+        tx.tenant_id().0,
+        name,
+        new.kind as PartnerKind,
+        new.email,
+        ext,
+    )
     .fetch_one(tx.conn())
     .await?;
     tx.publish("masterdata.partner.created", &partner).await?;
@@ -187,22 +188,23 @@ pub async fn update(
         .map(|e| Some(e.trim().to_string()).filter(|e| !e.is_empty()));
 
     let mut tx = ctx.begin(&state.db).await?;
-    let partner = sqlx::query_as::<_, Partner>(&format!(
-        "UPDATE partners SET
+    let partner = sqlx::query_as!(
+        Partner,
+        r#"UPDATE partners SET
              name = coalesce($2, name),
              kind = coalesce($3, kind),
              email = CASE WHEN $4 THEN $5 ELSE email END,
              ext = coalesce($6, ext),
              updated_at = now()
          WHERE id = $1
-         RETURNING {COLUMNS}"
-    ))
-    .bind(id)
-    .bind(name)
-    .bind(changes.kind)
-    .bind(email.is_some())
-    .bind(email.flatten())
-    .bind(changes.ext)
+         RETURNING id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at"#,
+        id,
+        name,
+        changes.kind as Option<PartnerKind>,
+        email.is_some(),
+        email.flatten(),
+        changes.ext,
+    )
     .fetch_optional(tx.conn())
     .await?
     .ok_or(Error::NotFound)?;
@@ -234,10 +236,12 @@ pub async fn get(
 
 /// Loads one partner of the transaction's tenant.
 pub(crate) async fn find(tx: &mut TenantTx, id: Uuid) -> Result<Option<Partner>> {
-    Ok(
-        sqlx::query_as::<_, Partner>(&format!("SELECT {COLUMNS} FROM partners WHERE id = $1"))
-            .bind(id)
-            .fetch_optional(tx.conn())
-            .await?,
+    Ok(sqlx::query_as!(
+        Partner,
+        r#"SELECT id, name, kind AS "kind: PartnerKind", email, ext, created_at, updated_at
+         FROM partners WHERE id = $1"#,
+        id,
     )
+    .fetch_optional(tx.conn())
+    .await?)
 }

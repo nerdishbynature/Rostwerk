@@ -53,15 +53,16 @@ pub async fn upsert(
     subject: &str,
     kind: MemberKind,
 ) -> Result<Option<Member>> {
-    let member = sqlx::query_as::<_, Member>(
-        "INSERT INTO tenant_members (tenant_id, subject, kind)
+    let member = sqlx::query_as!(
+        Member,
+        r#"INSERT INTO tenant_members (tenant_id, subject, kind)
          SELECT id, $2, $3 FROM tenants WHERE id = $1
          ON CONFLICT (tenant_id, subject) DO UPDATE SET kind = EXCLUDED.kind
-         RETURNING tenant_id, subject, kind, created_at",
+         RETURNING tenant_id, subject, kind AS "kind: MemberKind", created_at"#,
+        tenant.0,
+        subject,
+        kind as MemberKind,
     )
-    .bind(tenant)
-    .bind(subject)
-    .bind(kind)
     .fetch_optional(db.system_pool())
     .await?;
     Ok(member)
@@ -69,20 +70,23 @@ pub async fn upsert(
 
 /// Removes the subject from the tenant. `false` if it was not a member.
 pub async fn remove(db: &Db, tenant: TenantId, subject: &str) -> Result<bool> {
-    let result = sqlx::query("DELETE FROM tenant_members WHERE tenant_id = $1 AND subject = $2")
-        .bind(tenant)
-        .bind(subject)
-        .execute(db.system_pool())
-        .await?;
+    let result = sqlx::query!(
+        "DELETE FROM tenant_members WHERE tenant_id = $1 AND subject = $2",
+        tenant.0,
+        subject,
+    )
+    .execute(db.system_pool())
+    .await?;
     Ok(result.rows_affected() > 0)
 }
 
 pub async fn list(db: &Db, tenant: TenantId) -> Result<Vec<Member>> {
-    let members = sqlx::query_as::<_, Member>(
-        "SELECT tenant_id, subject, kind, created_at FROM tenant_members
-         WHERE tenant_id = $1 ORDER BY subject",
+    let members = sqlx::query_as!(
+        Member,
+        r#"SELECT tenant_id, subject, kind AS "kind: MemberKind", created_at FROM tenant_members
+         WHERE tenant_id = $1 ORDER BY subject"#,
+        tenant.0,
     )
-    .bind(tenant)
     .fetch_all(db.system_pool())
     .await?;
     Ok(members)
@@ -97,15 +101,16 @@ pub async fn memberships_of(
     subject: &str,
     tenant: Option<TenantId>,
 ) -> Result<Vec<Membership>> {
-    let rows = sqlx::query_as::<_, Membership>(
-        "SELECT t.id AS tenant_id, t.modules, m.kind
+    let rows = sqlx::query_as!(
+        Membership,
+        r#"SELECT t.id AS tenant_id, t.modules, m.kind AS "kind: MemberKind"
          FROM tenant_members m JOIN tenants t ON t.id = m.tenant_id
          WHERE m.subject = $1 AND ($2::uuid IS NULL OR m.tenant_id = $2)
          ORDER BY t.id
-         LIMIT 2",
+         LIMIT 2"#,
+        subject,
+        tenant.map(|t| t.0),
     )
-    .bind(subject)
-    .bind(tenant.map(|t| t.0))
     .fetch_all(db.system_pool())
     .await?;
     Ok(rows)

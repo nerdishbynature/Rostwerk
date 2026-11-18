@@ -26,6 +26,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # No database here: the sqlx macros use .sqlx/ (SQLX_OFFLINE in .cargo/config.toml).
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
 
@@ -71,4 +72,9 @@ jobs:
           exit 1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --version 0.8.6 --no-default-features --features postgres,rustls --locked
+      # Fails when a query changed but .sqlx/ was not regenerated.
+      - name: Check .sqlx is up to date
+        run: scripts/sqlx-prepare.sh --check
       - run: cargo test --workspace

@@ -33,12 +33,13 @@ impl Db {
         let mut tx = self.pool.begin().await?;
         // `true` = local to this transaction; the settings are gone after commit/rollback.
         // app.tenant_id arms RLS, app.actor is read by the audit trigger.
-        sqlx::query(
-            "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor', $2, true)",
+        sqlx::query!(
+            r#"SELECT set_config('app.tenant_id', $1, true) AS "tenant_id",
+                      set_config('app.actor', $2, true) AS "actor""#,
+            tenant_id.to_string(),
+            actor.to_string(),
         )
-        .bind(tenant_id.to_string())
-        .bind(actor.to_string())
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await?;
         Ok(TenantTx {
             tx,
@@ -51,8 +52,8 @@ impl Db {
     /// Only tables whose policy allows `app.system` become visible.
     pub async fn begin_system(&self) -> Result<SystemTx> {
         let mut tx = self.pool.begin().await?;
-        sqlx::query("SELECT set_config('app.system', 'on', true)")
-            .execute(&mut *tx)
+        sqlx::query!("SELECT set_config('app.system', 'on', true)")
+            .fetch_one(&mut *tx)
             .await?;
         Ok(SystemTx { tx })
     }
@@ -84,14 +85,14 @@ impl TenantTx {
         let payload = serde_json::to_value(payload)
             .map_err(|e| Error::Validation(format!("event payload: {e}")))?;
         let id = new_id();
-        sqlx::query(
+        sqlx::query!(
             "INSERT INTO outbox (id, tenant_id, topic, payload, actor) VALUES ($1, $2, $3, $4, $5)",
+            id,
+            self.tenant_id.0,
+            topic,
+            payload,
+            self.actor,
         )
-        .bind(id)
-        .bind(self.tenant_id)
-        .bind(topic)
-        .bind(payload)
-        .bind(&self.actor)
         .execute(&mut *self.tx)
         .await?;
         Ok(id)

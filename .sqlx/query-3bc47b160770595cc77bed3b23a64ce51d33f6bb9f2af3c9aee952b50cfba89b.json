@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, number, name, kind AS \"kind: ArticleKind\", unit, sales_price_amount,\n                   sales_price_currency, tax_category AS \"tax_category: TaxCategory\", active,\n                   ext, created_at, updated_at\n         FROM articles WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "kind: ArticleKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "sales_price_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "sales_price_currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "tax_category: TaxCategory",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "ext",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3bc47b160770595cc77bed3b23a64ce51d33f6bb9f2af3c9aee952b50cfba89b"
+}

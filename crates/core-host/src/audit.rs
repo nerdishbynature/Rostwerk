@@ -75,7 +75,8 @@ pub async fn list(
     }
 
     let mut tx = ctx.begin(&state.db).await?;
-    let mut items = sqlx::query_as::<_, AuditEntry>(
+    let mut items = sqlx::query_as!(
+        AuditEntry,
         "SELECT id, occurred_at, actor, entity_type, entity_id, action, before, after
          FROM audit_log
          WHERE ($1::text IS NULL OR entity_type = $1)
@@ -83,11 +84,11 @@ pub async fn list(
            AND ($3::bigint IS NULL OR id > $3)
          ORDER BY id
          LIMIT $4",
+        params.entity_type,
+        params.entity_id,
+        params.after,
+        limit + 1,
     )
-    .bind(params.entity_type)
-    .bind(params.entity_id)
-    .bind(params.after)
-    .bind(limit + 1)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;

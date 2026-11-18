@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE partners SET\n             name = coalesce($2, name),\n             kind = coalesce($3, kind),\n             email = CASE WHEN $4 THEN $5 ELSE email END,\n             ext = coalesce($6, ext),\n             updated_at = now()\n         WHERE id = $1\n         RETURNING id, name, kind AS \"kind: PartnerKind\", email, ext, created_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind: PartnerKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "ext",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f663619f6729d7d0a79ffdc977924947e6a86721b3093353958c45bbe739843c"
+}

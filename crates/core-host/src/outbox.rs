@@ -56,15 +56,16 @@ impl EventSink for LogSink {
 /// If the sink fails, the transaction rolls back and the batch is retried later.
 pub async fn relay_once(db: &Db, sink: &dyn EventSink, batch: i64) -> Result<usize> {
     let mut tx = db.begin_system().await?;
-    let events = sqlx::query_as::<_, Event>(
+    let events = sqlx::query_as!(
+        Event,
         "SELECT id, tenant_id, topic, payload, actor, occurred_at
          FROM outbox
          WHERE published_at IS NULL
          ORDER BY id
          LIMIT $1
          FOR UPDATE SKIP LOCKED",
+        batch,
     )
-    .bind(batch)
     .fetch_all(tx.conn())
     .await?;
 
@@ -80,10 +81,10 @@ pub async fn relay_once(db: &Db, sink: &dyn EventSink, batch: i64) -> Result<usi
     }
 
     if !published.is_empty() {
-        sqlx::query(
+        sqlx::query!(
             "UPDATE outbox SET published_at = now(), attempts = attempts + 1 WHERE id = ANY($1)",
+            &published,
         )
-        .bind(&published)
         .execute(tx.conn())
         .await?;
     }
