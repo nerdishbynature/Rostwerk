@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO accounts (id, tenant_id, number, name, type)\n         VALUES ($1, $2, $3, $4, $5)\n         RETURNING id, number, name, type AS \"account_type: AccountType\", created_at, updated_at",
+  "query": "UPDATE accounts SET\n             number = coalesce($2, number),\n             name = coalesce($3, name),\n             type = coalesce($4, type),\n             updated_at = now()\n         WHERE id = $1\n         RETURNING id, number, name, type AS \"account_type: AccountType\", tax_code, created_at, updated_at",
   "describe": {
     "columns": [
       {
@@ -25,18 +25,22 @@
       },
       {
         "ordinal": 4,
+        "name": "tax_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Uuid",
         "Text",
         "Text",
@@ -48,9 +52,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "09ee45ac61563cc209dbe09f949085e771dc9878a09519ace4aef3447cb93f57"
+  "hash": "5f5dc455ec4b8bdcfff7a3e66b318f4d397cee2aa05f952c847f2b417c097e01"
 }

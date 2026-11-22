@@ -16,7 +16,7 @@ crates/
   core-kernel/        TenantCtx, tenant-scoped transactions (RLS), IDs, Money, errors
   core-host/          Module trait, module registry, per-tenant module gate, tenant registry
   module-masterdata/  Business partners (customers, suppliers) and articles
-  module-accounting/  Chart of accounts, double-entry journal with immutable posted entries
+  module-accounting/  Chart of accounts (SKR03/SKR04 templates), tax codes, double-entry journal with immutable posted entries
 apps/
   api-server/         Binds core and modules into one HTTP service (`rostwerk` binary)
 docker/               Postgres init (application role), Keycloak dev realm

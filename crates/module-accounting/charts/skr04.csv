@@ -1,0 +1,107 @@
+# DATEV Standardkontenrahmen SKR 04 (Abschlussgliederungsprinzip).
+# Source: DATEV eG, "Kontenrahmen DATEV SKR 04", edition 2025 (Art.-Nr. 11175).
+# Template version: skr04-2025.1
+#
+# A curated subset of the accounts small companies use most, not the full chart.
+# Tenants add further accounts through the accounts API.
+#
+# Columns: number;type;automatic;tax_code;name
+#   type: asset, liability, equity, revenue or expense
+#   automatic: yes for an automatic account (Automatikkonto, AM), else no
+#   tax_code: Rostwerk tax code of an automatic account, empty otherwise
+number;type;automatic;tax_code;name
+0135;asset;no;;EDV-Software
+0240;asset;no;;Geschäftsbauten
+0440;asset;no;;Maschinen
+0520;asset;no;;Pkw
+0640;asset;no;;Ladeneinrichtung
+0650;asset;no;;Büroeinrichtung
+0670;asset;no;;Geringwertige Wirtschaftsgüter
+0690;asset;no;;Sonstige Betriebs- und Geschäftsausstattung
+1140;asset;no;;Bestand Waren
+1200;asset;no;;Forderungen aus Lieferungen und Leistungen
+1300;asset;no;;Sonstige Vermögensgegenstände
+1401;asset;no;;Abziehbare Vorsteuer 7 %
+1404;asset;no;;Abziehbare Vorsteuer aus innergemeinschaftlichem Erwerb 19 %
+1406;asset;no;;Abziehbare Vorsteuer 19 %
+1407;asset;no;;Abziehbare Vorsteuer nach § 13b UStG 19 %
+1460;asset;no;;Geldtransit
+1600;asset;no;;Kasse
+1800;asset;no;;Bank
+2100;equity;no;;Privatentnahmen allgemein
+2180;equity;no;;Privateinlagen
+2900;equity;no;;Gezeichnetes Kapital
+2920;equity;no;;Kapitalrücklage
+2970;equity;no;;Gewinnvortrag vor Verwendung
+2978;equity;no;;Verlustvortrag vor Verwendung
+3010;liability;no;;Rückstellungen für Pensionen und ähnliche Verpflichtungen
+3070;liability;no;;Sonstige Rückstellungen
+3095;liability;no;;Rückstellungen für Abschluss- und Prüfungskosten
+3150;liability;no;;Verbindlichkeiten gegenüber Kreditinstituten
+3300;liability;no;;Verbindlichkeiten aus Lieferungen und Leistungen
+3500;liability;no;;Sonstige Verbindlichkeiten
+3720;liability;no;;Verbindlichkeiten aus Lohn und Gehalt
+3730;liability;no;;Verbindlichkeiten aus Lohn- und Kirchensteuer
+3740;liability;no;;Verbindlichkeiten im Rahmen der sozialen Sicherheit
+3801;liability;no;;Umsatzsteuer 7 %
+3804;liability;no;;Umsatzsteuer aus innergemeinschaftlichem Erwerb 19 %
+3806;liability;no;;Umsatzsteuer 19 %
+3820;liability;no;;Umsatzsteuer-Vorauszahlungen
+3837;liability;no;;Umsatzsteuer nach § 13b UStG 19 %
+3840;liability;no;;Umsatzsteuer laufendes Jahr
+3841;liability;no;;Umsatzsteuer Vorjahr
+4125;revenue;yes;IGL_OUT;Steuerfreie innergemeinschaftliche Lieferungen § 4 Nr. 1b UStG
+4200;revenue;no;;Erlöse
+4300;revenue;yes;VAT7_OUT;Erlöse 7 % USt
+4337;revenue;yes;RC_OUT;Erlöse aus Leistungen, für die der Leistungsempfänger die Steuer nach § 13b UStG schuldet
+4400;revenue;yes;VAT19_OUT;Erlöse 19 % USt
+4731;revenue;yes;VAT7_OUT;Gewährte Skonti 7 % USt
+4736;revenue;yes;VAT19_OUT;Gewährte Skonti 19 % USt
+4830;revenue;no;;Sonstige betriebliche Erträge
+4845;revenue;yes;VAT19_OUT;Erlöse aus Verkäufen Sachanlagevermögen 19 % USt (bei Buchgewinn)
+5200;expense;no;;Wareneingang
+5300;expense;yes;VAT7_IN;Wareneingang 7 % Vorsteuer
+5400;expense;yes;VAT19_IN;Wareneingang 19 % Vorsteuer
+5420;expense;yes;IGE7_IN;Innergemeinschaftlicher Erwerb 7 % Vorsteuer und 7 % Umsatzsteuer
+5425;expense;yes;IGE19_IN;Innergemeinschaftlicher Erwerb 19 % Vorsteuer und 19 % Umsatzsteuer
+5731;expense;yes;VAT7_IN;Erhaltene Skonti 7 % Vorsteuer
+5736;expense;yes;VAT19_IN;Erhaltene Skonti 19 % Vorsteuer
+5800;expense;no;;Bezugsnebenkosten
+5900;expense;no;;Fremdleistungen
+5925;expense;yes;RC19_IN;Leistungen eines im Ausland ansässigen Unternehmers 19 % Vorsteuer und 19 % Umsatzsteuer
+6010;expense;no;;Löhne
+6020;expense;no;;Gehälter
+6110;expense;no;;Gesetzliche soziale Aufwendungen
+6200;expense;no;;Abschreibungen auf immaterielle Vermögensgegenstände
+6220;expense;no;;Abschreibungen auf Sachanlagen
+6260;expense;no;;Sofortabschreibung geringwertiger Wirtschaftsgüter
+6300;expense;no;;Sonstige betriebliche Aufwendungen
+6310;expense;no;;Miete (unbewegliche Wirtschaftsgüter)
+6325;expense;no;;Gas, Strom, Wasser
+6330;expense;no;;Reinigung
+6400;expense;no;;Versicherungen
+6420;expense;no;;Beiträge
+6495;expense;no;;Wartungskosten für Hard- und Software
+6500;expense;no;;Fahrzeugkosten
+6530;expense;no;;Laufende Kfz-Betriebskosten
+6600;expense;no;;Werbekosten
+6640;expense;no;;Bewirtungskosten
+6644;expense;no;;Nicht abzugsfähige Bewirtungskosten
+6650;expense;no;;Reisekosten Arbeitnehmer
+6670;expense;no;;Reisekosten Unternehmer
+6800;expense;no;;Porto
+6805;expense;no;;Telefon
+6810;expense;no;;Telefax und Internetkosten
+6815;expense;no;;Bürobedarf
+6820;expense;no;;Zeitschriften, Bücher
+6821;expense;no;;Fortbildungskosten
+6825;expense;no;;Rechts- und Beratungskosten
+6827;expense;no;;Abschluss- und Prüfungskosten
+6830;expense;no;;Buchführungskosten
+6837;expense;no;;Aufwendungen für die zeitlich befristete Überlassung von Rechten (Lizenzen, Konzessionen)
+6850;expense;no;;Sonstiger Betriebsbedarf
+6855;expense;no;;Nebenkosten des Geldverkehrs
+6930;expense;no;;Forderungsverluste (übliche Höhe)
+7100;revenue;no;;Sonstige Zinsen und ähnliche Erträge
+7300;expense;no;;Zinsen und ähnliche Aufwendungen
+7310;expense;no;;Zinsaufwendungen für kurzfristige Verbindlichkeiten

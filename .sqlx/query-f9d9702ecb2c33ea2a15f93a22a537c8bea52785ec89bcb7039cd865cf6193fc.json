@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, number, type AS \"account_type: AccountType\", tax_code\n         FROM accounts WHERE id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "account_type: AccountType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tax_code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f9d9702ecb2c33ea2a15f93a22a537c8bea52785ec89bcb7039cd865cf6193fc"
+}

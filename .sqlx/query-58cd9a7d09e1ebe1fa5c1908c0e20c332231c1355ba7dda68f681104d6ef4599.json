@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT chart AS \"chart: Chart\", version, set_up_at FROM accounting_charts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "chart: Chart",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "set_up_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "58cd9a7d09e1ebe1fa5c1908c0e20c332231c1355ba7dda68f681104d6ef4599"
+}
