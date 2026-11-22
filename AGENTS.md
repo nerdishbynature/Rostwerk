@@ -1,7 +1,8 @@
 # Working on Rostwerk issues
 
 This is the pickup protocol for people and coding agents. Code rules live in
-[CONTRIBUTING.md](CONTRIBUTING.md); read it before changing code.
+[CONTRIBUTING.md](CONTRIBUTING.md); read it before changing code. How the system is
+put together is in [docs/architecture.md](docs/architecture.md).
 
 Work is tracked in [GitHub issues](https://github.com/nerdishbynature/Rostwerk/issues)
 and on the [Rostwerk project board](https://github.com/orgs/nerdishbynature/projects/1)

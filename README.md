@@ -17,22 +17,20 @@ crates/
   core-host/          Module trait, module registry, per-tenant module gate, tenant registry
   module-masterdata/  Business partners (customers, suppliers) and articles
   module-accounting/  Chart of accounts, double-entry journal with immutable posted entries
+  event-nats/         Event sink that publishes outbox events to NATS JetStream
 apps/
   api-server/         Binds core and modules into one HTTP service (`rostwerk` binary)
 docker/               Postgres init (application role), Keycloak dev realm
 ```
 
-## How tenant isolation works
+How the pieces fit together (crates, request lifecycle, tenant isolation with
+row-level security, audit log, outbox, module boundaries) and what is planned is
+described in [docs/architecture.md](docs/architecture.md).
 
-1. Every request is authenticated and resolved to a `TenantCtx` (tenant, actor, enabled modules).
-2. Modules reach the database only through `ctx.begin(&db)`, which opens a transaction
-   and sets `app.tenant_id` for that transaction.
-3. Every tenant table has a Postgres row-level security policy on `tenant_id`.
-   The app connects as `rostwerk_app` (no superuser, no `BYPASSRLS`), so a query
-   without a tenant context sees no rows and cannot write any.
-4. Routes of a module the tenant has not enabled answer `404`.
-
-Migrations run as `rostwerk_admin`; the server itself runs as `rostwerk_app`.
+In short: every request is resolved to a tenant, modules reach the database only
+through a tenant-scoped transaction with Postgres row-level security, and routes of a
+module the tenant has not enabled answer `404`. Migrations run as `rostwerk_admin`;
+the server itself runs as `rostwerk_app` (no superuser, no `BYPASSRLS`).
 
 ## Authentication
 
@@ -90,24 +88,19 @@ curl -X DELETE localhost:8080/admin/tenants/<tenant-id>/members/<sub> -H 'Author
 
 ## Audit log and events
 
-- **Audit log:** every insert, update and delete on an audited table is journaled
-  by the `rostwerk_audit()` trigger with actor, before and after. A module opts a
-  table in with one `CREATE TRIGGER` line, so no handler can forget it.
-  `audit_log` is append-only (updates, deletes, truncation and direct inserts fail)
-  and tenant-scoped. Read it via `GET /v1/audit`.
-- **Outbox:** modules call `tx.publish(topic, &payload)` inside their tenant
-  transaction. The event is stored only if the transaction commits. A relay moves
-  events to an `EventSink` with at-least-once delivery. Topic convention:
-  `<module>.<entity>.<event>`, e.g. `masterdata.partner.created`.
-- **Events on NATS:** with `NATS_URL` set, the relay publishes to NATS JetStream
-  (crate `event-nats`); without it, events go to the log. On startup the stream
-  `ROSTWERK` with subjects `rostwerk.>` is created if missing. Each event is published
-  on `rostwerk.<tenant_id>.<topic>` as JSON (`id`, `tenant_id`, `topic`, `payload`,
-  `actor`, `occurred_at`), and the relay marks it published only after JetStream acked
-  it. The event id is sent as `Nats-Msg-Id`, so JetStream drops redeliveries within its
-  duplicate window (2 minutes by default); consumers should still dedupe on `id`.
+Every change to an audited table is journaled by a database trigger in the same
+transaction (append-only, read it via `GET /v1/audit`). Modules record domain events
+with `tx.publish(topic, &payload)`; they are stored in an outbox only if the
+transaction commits and then relayed at least once. Details:
+[docs/architecture.md](docs/architecture.md#audit-log).
 
-### Dry runs
+With `NATS_URL` set, events go to NATS JetStream (stream `ROSTWERK`, created on startup
+if missing), otherwise to the log. Each event is published on
+`rostwerk.<tenant_id>.<topic>` as JSON (`id`, `tenant_id`, `topic`, `payload`, `actor`,
+`occurred_at`) with the event id as `Nats-Msg-Id`, so JetStream drops redeliveries
+within its duplicate window (2 minutes by default); consumers should still dedupe on `id`.
+
+## Dry runs
 
 Every write endpoint under `/v1` can be previewed: send `Prefer: dry-run` and the call
 runs exactly as usual (validation, database constraints, audit trigger, events) and is
@@ -134,7 +127,7 @@ to its `#[utoipa::path]`, and ends with `dry_run.respond(tx, status, body)` inst
 Commands of other modules are called with `bus.command_in(&ctx, &mut tx, ...)`, so they
 run in the handler's transaction and are rolled back with it, in a dry run as well.
 
-### Custom fields
+## Custom fields
 
 Modules declare which entities are extensible (`GET /v1/ext-entities`, e.g.
 `masterdata.partner`). Each tenant defines fields on them, identified by entity and key,
