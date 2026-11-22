@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM accounts WHERE id = $1\n         RETURNING id, number, name, type AS \"account_type: AccountType\", created_at, updated_at",
+  "query": "DELETE FROM accounts WHERE id = $1\n         RETURNING id, number, name, type AS \"account_type: AccountType\", tax_code, created_at, updated_at",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "tax_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -44,9 +49,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "80a19162e1a0325c37083aefae8f8933f6f7e465496642e263e2ed6353173e03"
+  "hash": "7e0d9902c7543fccb8e68b00506638469a5bcc984fc0d40d26a6303667998d94"
 }

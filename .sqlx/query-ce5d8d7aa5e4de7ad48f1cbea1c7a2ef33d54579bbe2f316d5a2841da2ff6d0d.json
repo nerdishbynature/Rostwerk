@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code, direction AS \"direction: TaxDirection\"\n         FROM accounting_tax_codes WHERE code = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "direction: TaxDirection",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ce5d8d7aa5e4de7ad48f1cbea1c7a2ef33d54579bbe2f316d5a2841da2ff6d0d"
+}

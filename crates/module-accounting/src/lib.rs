@@ -5,10 +5,15 @@
 //! sequence number. Posted entries and their lines are immutable (GoBD); the
 //! database enforces this with triggers, see the migrations. Mistakes are
 //! corrected with a reversal entry.
+//!
+//! A tenant can set up its chart from the standard charts SKR03 or SKR04
+//! (`charts/`). Lines carry optional Rostwerk tax codes, independent of DATEV.
 
 mod accounts;
+mod charts;
 mod common;
 mod entries;
+mod tax;
 
 use core_host::{CoreState, Module, ModuleManifest};
 use sqlx::migrate::Migrator;
@@ -38,6 +43,9 @@ impl Module for Accounting {
             .routes(routes!(accounts::list, accounts::create))
             .routes(routes!(accounts::get, accounts::update, accounts::delete))
             .routes(routes!(accounts::balance))
+            .routes(routes!(charts::get))
+            .routes(routes!(charts::setup))
+            .routes(routes!(tax::list))
             .routes(routes!(entries::list, entries::create))
             .routes(routes!(entries::get, entries::update, entries::delete))
             .routes(routes!(entries::post))

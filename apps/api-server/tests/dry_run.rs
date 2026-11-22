@@ -271,8 +271,9 @@ async fn every_write_endpoint_documents_dry_run() {
         }
     }
     assert_eq!(
-        checked, 14,
+        checked, 15,
         "partners and articles: create and update; ext fields: put and delete; \
-         accounts: create, update, delete; entries: create, update, delete, post, reverse"
+         accounts: create, update, delete; entries: create, update, delete, post, reverse; \
+         chart: setup"
     );
 }

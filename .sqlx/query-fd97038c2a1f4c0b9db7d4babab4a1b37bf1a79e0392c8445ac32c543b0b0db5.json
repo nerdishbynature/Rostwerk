@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, number, name, type AS \"account_type: AccountType\", created_at, updated_at\n         FROM accounts WHERE id = $1",
+  "query": "SELECT id, number, name, type AS \"account_type: AccountType\", tax_code, created_at, updated_at\n         FROM accounts\n         WHERE ($1::uuid IS NULL OR id > $1)\n         ORDER BY id\n         LIMIT $2",
   "describe": {
     "columns": [
       {
@@ -25,18 +25,24 @@
       },
       {
         "ordinal": 4,
+        "name": "tax_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
@@ -44,9 +50,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "acd91010ac046839f9f05ac2b9d2f6489fe2f7426a493202ae6ed20be40f05de"
+  "hash": "fd97038c2a1f4c0b9db7d4babab4a1b37bf1a79e0392c8445ac32c543b0b0db5"
 }

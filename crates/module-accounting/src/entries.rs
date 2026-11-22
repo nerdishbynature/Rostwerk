@@ -14,11 +14,11 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::accounts;
 use crate::common::{
     MoneySchema, check_amount, currency_column, non_empty, page_limit, paginate,
     violated_constraint,
 };
+use crate::tax::{self, TaxedLine};
 
 /// At most one reversal per entry, see the migration.
 const REVERSES_CONSTRAINT: &str = "journal_entries_reverses_id_key";
@@ -60,6 +60,8 @@ pub struct Line {
     /// Positive amount booked on `side`.
     #[schema(value_type = MoneySchema)]
     pub amount: Money,
+    /// Tax code of the line. On an automatic account always its code.
+    pub tax_code: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -123,6 +125,7 @@ struct LineRow {
     side: Side,
     amount: Decimal,
     currency: String,
+    tax_code: Option<String>,
 }
 
 impl LineRow {
@@ -133,6 +136,7 @@ impl LineRow {
             account_id: self.account_id,
             side: self.side,
             amount: Money::new(self.amount, currency_column("currency", &self.currency)?),
+            tax_code: self.tax_code,
         })
     }
 }
@@ -144,6 +148,11 @@ pub struct NewLine {
     /// Positive amount, at most 4 decimal places.
     #[schema(value_type = MoneySchema)]
     pub amount: Money,
+    /// Optional tax code (see `GET /v1/accounting/tax-codes`). Output codes fit
+    /// revenue accounts, input codes expense and asset accounts. On an
+    /// automatic account it defaults to, and must equal, the account's code.
+    #[serde(default)]
+    pub tax_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -208,19 +217,19 @@ fn document_ref(value: Option<&str>) -> Result<Option<&str>> {
 }
 
 async fn insert_lines(tx: &mut TenantTx, entry_id: Uuid, lines: &[NewLine]) -> Result<()> {
-    let ids: Vec<Uuid> = lines.iter().map(|l| l.account_id).collect();
-    let missing = accounts::missing(tx, &ids).await?;
-    if !missing.is_empty() {
-        let list: Vec<String> = missing.iter().map(Uuid::to_string).collect();
-        return Err(Error::Validation(format!(
-            "unknown account: {}",
-            list.join(", ")
-        )));
-    }
-    for (i, line) in lines.iter().enumerate() {
+    let taxed: Vec<TaxedLine> = lines
+        .iter()
+        .map(|l| TaxedLine {
+            account_id: l.account_id,
+            tax_code: l.tax_code.as_deref(),
+        })
+        .collect();
+    let tax_codes = tax::resolve(tx, &taxed).await?;
+    for (i, (line, tax_code)) in lines.iter().zip(tax_codes).enumerate() {
         sqlx::query!(
-            "INSERT INTO journal_lines (id, tenant_id, entry_id, line_no, account_id, side, amount, currency)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO journal_lines
+               (id, tenant_id, entry_id, line_no, account_id, side, amount, currency, tax_code)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             new_id(),
             tx.tenant_id().0,
             entry_id,
@@ -229,6 +238,7 @@ async fn insert_lines(tx: &mut TenantTx, entry_id: Uuid, lines: &[NewLine]) -> R
             line.side as Side,
             line.amount.amount,
             line.amount.currency.as_str(),
+            tax_code,
         )
         .execute(tx.conn())
         .await?;
@@ -239,7 +249,8 @@ async fn insert_lines(tx: &mut TenantTx, entry_id: Uuid, lines: &[NewLine]) -> R
 async fn lines_of(tx: &mut TenantTx, entry_ids: &[Uuid]) -> Result<HashMap<Uuid, Vec<Line>>> {
     let rows = sqlx::query_as!(
         LineRow,
-        r#"SELECT id, entry_id, line_no, account_id, side AS "side: Side", amount, currency
+        r#"SELECT id, entry_id, line_no, account_id, side AS "side: Side", amount, currency,
+                  tax_code
          FROM journal_lines WHERE entry_id = ANY($1)
          ORDER BY entry_id, line_no"#,
         entry_ids,
@@ -328,6 +339,26 @@ async fn post_draft(tx: &mut TenantTx, id: Uuid) -> Result<Entry> {
         return Err(Error::Validation(format!(
             "debit ({debit}) and credit ({credit}) must be equal and positive"
         )));
+    }
+    // The accounts may have changed since the lines were drafted.
+    let taxed: Vec<TaxedLine> = entry
+        .lines
+        .iter()
+        .map(|l| TaxedLine {
+            account_id: l.account_id,
+            tax_code: l.tax_code.as_deref(),
+        })
+        .collect();
+    let resolved = tax::resolve(tx, &taxed).await?;
+    if entry
+        .lines
+        .iter()
+        .zip(&resolved)
+        .any(|(l, code)| &l.tax_code != code)
+    {
+        return Err(Error::Validation(
+            "tax codes of the lines no longer match their automatic accounts".into(),
+        ));
     }
 
     // The row lock on the tenant's counter serializes concurrent postings; a
@@ -555,7 +586,8 @@ pub async fn delete(
 }
 
 /// Post a draft entry: it must have a booking date, a document reference and
-/// lines in one currency whose debits equal their credits. It gets the
+/// lines in one currency whose debits equal their credits, and each line's
+/// tax code must still fit its account. It gets the
 /// tenant's next sequence number and can no longer be changed.
 #[utoipa::path(
     post,
@@ -663,6 +695,7 @@ pub async fn reverse(
             account_id: l.account_id,
             side: l.side.opposite(),
             amount: l.amount,
+            tax_code: l.tax_code.clone(),
         })
         .collect();
     insert_lines(&mut tx, reversal_id, &mirror).await?;

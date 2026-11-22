@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::common::{
     MoneySchema, PageParams, currency_column, non_empty, paginate, violated_constraint,
 };
+use crate::tax;
 
 /// Unique constraint on (tenant_id, number), see the migration.
 const NUMBER_CONSTRAINT: &str = "accounts_tenant_id_number_key";
@@ -32,6 +33,18 @@ pub enum AccountType {
     Expense,
 }
 
+impl AccountType {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            AccountType::Asset => "asset",
+            AccountType::Liability => "liability",
+            AccountType::Equity => "equity",
+            AccountType::Revenue => "revenue",
+            AccountType::Expense => "expense",
+        }
+    }
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Account {
     pub id: Uuid,
@@ -41,6 +54,9 @@ pub struct Account {
     #[serde(rename = "type")]
     #[schema(rename = "type")]
     pub account_type: AccountType,
+    /// Set on an automatic account (Automatikkonto): every line on it is taxed
+    /// with this code, and no other code is allowed.
+    pub tax_code: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -52,6 +68,10 @@ pub struct NewAccount {
     #[serde(rename = "type")]
     #[schema(rename = "type")]
     pub account_type: AccountType,
+    /// Makes the account an automatic account with this tax code. It must fit
+    /// the type (see `GET /v1/accounting/tax-codes`). Cannot be changed later.
+    #[serde(default)]
+    pub tax_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -59,7 +79,8 @@ pub struct AccountChanges {
     /// Cannot be changed once the account has posted lines.
     pub number: Option<String>,
     pub name: Option<String>,
-    /// Cannot be changed once the account has posted lines.
+    /// Cannot be changed once the account has posted lines. On an automatic
+    /// account the new type must fit its tax code.
     #[serde(rename = "type")]
     #[schema(rename = "type")]
     pub account_type: Option<AccountType>,
@@ -79,25 +100,10 @@ fn number_conflict(err: sqlx::Error) -> Error {
     err.into()
 }
 
-/// Ids of `ids` that are not accounts of the tenant.
-pub(crate) async fn missing(tx: &mut TenantTx, ids: &[Uuid]) -> Result<Vec<Uuid>> {
-    let found = sqlx::query_scalar!("SELECT id FROM accounts WHERE id = ANY($1)", ids)
-        .fetch_all(tx.conn())
-        .await?;
-    let mut missing: Vec<Uuid> = ids
-        .iter()
-        .copied()
-        .filter(|id| !found.contains(id))
-        .collect();
-    missing.sort();
-    missing.dedup();
-    Ok(missing)
-}
-
 async fn find(tx: &mut TenantTx, id: Uuid) -> Result<Option<Account>> {
     Ok(sqlx::query_as!(
         Account,
-        r#"SELECT id, number, name, type AS "account_type: AccountType", created_at, updated_at
+        r#"SELECT id, number, name, type AS "account_type: AccountType", tax_code, created_at, updated_at
          FROM accounts WHERE id = $1"#,
         id,
     )
@@ -123,7 +129,7 @@ pub async fn list(
     // One extra row tells whether another page exists.
     let mut items = sqlx::query_as!(
         Account,
-        r#"SELECT id, number, name, type AS "account_type: AccountType", created_at, updated_at
+        r#"SELECT id, number, name, type AS "account_type: AccountType", tax_code, created_at, updated_at
          FROM accounts
          WHERE ($1::uuid IS NULL OR id > $1)
          ORDER BY id
@@ -161,17 +167,23 @@ pub async fn create(
     let number = non_empty("number", &new.number)?;
     let name = non_empty("name", &new.name)?;
 
+    let tax_code = new.tax_code.as_deref().map(str::trim);
+
     let mut tx = ctx.begin(&state.db).await?;
+    if let Some(code) = tax_code {
+        tax::check_account_code(&mut tx, code, new.account_type, "this account").await?;
+    }
     let account = sqlx::query_as!(
         Account,
-        r#"INSERT INTO accounts (id, tenant_id, number, name, type)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, number, name, type AS "account_type: AccountType", created_at, updated_at"#,
+        r#"INSERT INTO accounts (id, tenant_id, number, name, type, tax_code)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, number, name, type AS "account_type: AccountType", tax_code, created_at, updated_at"#,
         new_id(),
         tx.tenant_id().0,
         number,
         name,
         new.account_type as AccountType,
+        tax_code,
     )
     .fetch_one(tx.conn())
     .await
@@ -235,7 +247,7 @@ pub async fn update(
     let mut tx = ctx.begin(&state.db).await?;
     // Lock the account, so that its postings cannot change under the check.
     let current = sqlx::query!(
-        r#"SELECT number, type AS "account_type: AccountType",
+        r#"SELECT number, type AS "account_type: AccountType", tax_code,
                   EXISTS (SELECT 1 FROM journal_lines l
                             JOIN journal_entries e ON e.id = l.entry_id
                            WHERE l.account_id = a.id AND e.status = 'posted') AS "posted!"
@@ -254,6 +266,9 @@ pub async fn update(
             "number and type of an account with postings cannot be changed".into(),
         ));
     }
+    if let (Some(code), Some(account_type)) = (&current.tax_code, changes.account_type) {
+        tax::check_account_code(&mut tx, code, account_type, "this account").await?;
+    }
 
     let account = sqlx::query_as!(
         Account,
@@ -263,7 +278,7 @@ pub async fn update(
              type = coalesce($4, type),
              updated_at = now()
          WHERE id = $1
-         RETURNING id, number, name, type AS "account_type: AccountType", created_at, updated_at"#,
+         RETURNING id, number, name, type AS "account_type: AccountType", tax_code, created_at, updated_at"#,
         id,
         number,
         name,
@@ -298,7 +313,7 @@ pub async fn delete(
     let account = sqlx::query_as!(
         Account,
         r#"DELETE FROM accounts WHERE id = $1
-         RETURNING id, number, name, type AS "account_type: AccountType", created_at, updated_at"#,
+         RETURNING id, number, name, type AS "account_type: AccountType", tax_code, created_at, updated_at"#,
         id,
     )
     .fetch_optional(tx.conn())

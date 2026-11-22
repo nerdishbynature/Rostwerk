@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounting_charts (id, tenant_id, chart, version)\n         VALUES ($1, $2, $3, $4)\n         RETURNING chart AS \"chart: Chart\", version, set_up_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "chart: Chart",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "set_up_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8ace61efa31a9ceed49b048105d5898aa0f20e3b0678f602d09ed8635b1eab00"
+}
